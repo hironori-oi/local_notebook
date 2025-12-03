@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: notebooklm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-notebooklm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-notebooklm_password}
+      POSTGRES_DB: ${POSTGRES_DB:-notebooklm}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-notebooklm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: notebooklm-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-notebooklm}:${POSTGRES_PASSWORD:-notebooklm_password}@postgres:5432/${POSTGRES_DB:-notebooklm}
+
+      # Environment
+      ENV: ${ENV:-production}
+
+      # LLM Configuration
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_API_BASE: ${LLM_API_BASE:-http://host.docker.internal:11434/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-oss-120b}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
+
+      # Embedding Configuration
+      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE:-http://host.docker.internal:11434/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-plamo-embedding-1b}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-2048}
+      EMBEDDING_TIMEOUT: ${EMBEDDING_TIMEOUT:-60}
+
+      # Authentication
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+
+      # Rate Limiting
+      RATE_LIMIT_AUTH_REQUESTS: ${RATE_LIMIT_AUTH_REQUESTS:-5}
+      RATE_LIMIT_AUTH_WINDOW: ${RATE_LIMIT_AUTH_WINDOW:-900}
+      RATE_LIMIT_API_REQUESTS: ${RATE_LIMIT_API_REQUESTS:-100}
+      RATE_LIMIT_API_WINDOW: ${RATE_LIMIT_API_WINDOW:-60}
+
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+
+      # File uploads
+      UPLOAD_DIR: /app/data/uploads
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-50}
+
+      # Generation LLM (for infographic/slide generation)
+      GENERATION_LLM_MODEL: ${GENERATION_LLM_MODEL:-}
+      GENERATION_LLM_MAX_TOKENS: ${GENERATION_LLM_MAX_TOKENS:-8192}
+
+      # Generated files directory
+      GENERATED_FILES_DIR: /app/data/generated
+
+      # Janus Image Generation (Dedicated Server)
+      JANUS_API_BASE: ${JANUS_API_BASE:-http://host.docker.internal:9000}
+      JANUS_TIMEOUT: ${JANUS_TIMEOUT:-180}
+      JANUS_ENABLED: ${JANUS_ENABLED:-true}
+      JANUS_INFOGRAPHIC_WIDTH: ${JANUS_INFOGRAPHIC_WIDTH:-384}
+      JANUS_INFOGRAPHIC_HEIGHT: ${JANUS_INFOGRAPHIC_HEIGHT:-384}
+      JANUS_SLIDE_WIDTH: ${JANUS_SLIDE_WIDTH:-384}
+      JANUS_SLIDE_HEIGHT: ${JANUS_SLIDE_HEIGHT:-384}
+      JANUS_CFG_WEIGHT: ${JANUS_CFG_WEIGHT:-5.0}
+      JANUS_TEMPERATURE: ${JANUS_TEMPERATURE:-1.0}
+    volumes:
+      - upload_data:/app/data/uploads
+      - generated_data:/app/data/generated
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    container_name: notebooklm-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Database migrations (one-shot)
+  migrations:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: notebooklm-migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-notebooklm}:${POSTGRES_PASSWORD:-notebooklm_password}@postgres:5432/${POSTGRES_DB:-notebooklm}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+volumes:
+  postgres_data:
+    driver: local
+  upload_data:
+    driver: local
+  generated_data:
+    driver: local
+
+networks:
+  default:
+    name: notebooklm-network
