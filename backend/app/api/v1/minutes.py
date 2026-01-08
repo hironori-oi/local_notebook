@@ -8,27 +8,24 @@ import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
+                     Request, status)
 from sqlalchemy.orm import Session
 
 from app.celery_app.tasks.content import enqueue_minute_processing
-from app.core.deps import check_notebook_access, get_current_user, get_db, parse_uuid
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.minute import Minute
 from app.models.minute_chunk import MinuteChunk
 from app.models.minute_document import MinuteDocument
 from app.models.notebook import Notebook
 from app.models.source import Source
 from app.models.user import User
-from app.schemas.minute import (
-    MinuteCreate,
-    MinuteDetailOut,
-    MinuteDocumentsUpdate,
-    MinuteListItem,
-    MinuteOut,
-    MinuteSummaryUpdate,
-    MinuteUpdate,
-)
-from app.services.audit import AuditAction, TargetType, get_client_info, log_action
+from app.schemas.minute import (MinuteCreate, MinuteDetailOut,
+                                MinuteDocumentsUpdate, MinuteListItem,
+                                MinuteOut, MinuteSummaryUpdate, MinuteUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.embedding import embed_texts
 
 logger = logging.getLogger(__name__)

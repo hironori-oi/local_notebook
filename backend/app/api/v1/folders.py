@@ -8,17 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import check_notebook_access, get_current_user, get_db, parse_uuid
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.source import Source
 from app.models.source_folder import SourceFolder
 from app.models.user import User
-from app.schemas.source_folder import (
-    FolderCreate,
-    FolderOut,
-    FolderReorder,
-    FolderUpdate,
-)
-from app.services.audit import AuditAction, TargetType, get_client_info, log_action
+from app.schemas.source_folder import (FolderCreate, FolderOut, FolderReorder,
+                                       FolderUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 logger = logging.getLogger(__name__)
 

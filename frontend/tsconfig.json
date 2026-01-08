@@ -38,7 +38,7 @@
     "**/*.test.tsx",
     "**/*.spec.ts",
     "**/*.spec.tsx",
-    "vitest.setup.ts",
+    "vitest.setup.tsx",
     "vitest.config.ts"
   ]
 }

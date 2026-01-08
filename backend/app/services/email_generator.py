@@ -14,11 +14,10 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequestError, LLMConnectionError
 from app.models.llm_settings import LLMSettings
-from app.schemas.email import EmailContent, EmailGenerateResponse, SpeakerOpinion
-from app.services.context_retriever import (
-    format_summaries_for_prompt,
-    retrieve_summaries_for_email,
-)
+from app.schemas.email import (EmailContent, EmailGenerateResponse,
+                               SpeakerOpinion)
+from app.services.context_retriever import (format_summaries_for_prompt,
+                                            retrieve_summaries_for_email)
 from app.services.json_parser import parse_llm_json
 from app.services.llm_client import call_generation_llm
 

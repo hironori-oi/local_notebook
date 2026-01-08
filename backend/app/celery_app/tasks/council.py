@@ -209,7 +209,8 @@ def regenerate_agenda_summary_task(
         content_type: "materials", "minutes", or "both"
     """
     from app.models.council_agenda_item import CouncilAgendaItem
-    from app.services.council_content_processor import regenerate_agenda_summary
+    from app.services.council_content_processor import \
+        regenerate_agenda_summary
 
     logger.info(f"Regenerating agenda summary: {agenda_id}, type: {content_type}")
     db = self.db

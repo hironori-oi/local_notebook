@@ -18,20 +18,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy.types import String
 
 from app.core.config import settings
-from app.core.exceptions import BadRequestError, EmbeddingError, LLMConnectionError
+from app.core.exceptions import (BadRequestError, EmbeddingError,
+                                 LLMConnectionError)
 from app.models.chat_session import ChatSession
 from app.models.message import Message
 from app.models.source import Source
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.embedding import embed_texts
 from app.services.llm_client import call_llm, get_llm_client
-from app.services.rag_utils import (
-    build_context_text,
-    build_llm_messages,
-    format_embedding_for_pgvector,
-    get_conversation_history_generic,
-    update_session_timestamp,
-)
+from app.services.rag_utils import (build_context_text, build_llm_messages,
+                                    format_embedding_for_pgvector,
+                                    get_conversation_history_generic,
+                                    update_session_timestamp)
 
 logger = logging.getLogger(__name__)
 
