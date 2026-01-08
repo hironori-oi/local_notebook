@@ -231,7 +231,7 @@ def regenerate_agenda_summary_task(
                 regenerate_agenda_summary(
                     db,
                     UUID(agenda_id),
-                    content_type,  # type: ignore
+                    content_type,
                 )
             )
         finally:
