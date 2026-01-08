@@ -6,36 +6,32 @@ Provides endpoints for:
 - Sending messages with conversation history
 - Retrieving chat history per session
 """
+
+import json
 from typing import List, Optional
 from uuid import UUID
-import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access, parse_uuid
-from app.models.notebook import Notebook
+from app.celery_app.tasks.chat import enqueue_chat_processing
+from app.core.config import settings
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.chat_session import ChatSession
 from app.models.message import Message
+from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.chat import (
-    ChatRequest,
-    ChatResponse,
-    MessageOut,
-    ChatSessionCreate,
-    ChatSessionUpdate,
-    ChatSessionResponse,
-    ChatSessionListResponse,
-    ChatHistoryResponse,
-    AsyncChatResponse,
-    MessageStatusResponse,
-)
+from app.schemas.chat import (AsyncChatResponse, ChatHistoryResponse,
+                              ChatRequest, ChatResponse, ChatSessionCreate,
+                              ChatSessionListResponse, ChatSessionResponse,
+                              ChatSessionUpdate, MessageOut,
+                              MessageStatusResponse)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.rag import rag_answer, rag_answer_stream
-from app.celery_app.tasks.chat import enqueue_chat_processing
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
-from app.core.config import settings
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -44,21 +40,24 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # Helper Functions
 # =============================================================================
 
+
 def verify_notebook_access(db: Session, notebook_id: UUID, user: User) -> Notebook:
     """Verify that the user can access the notebook (owner or public)."""
     return check_notebook_access(db, notebook_id, user)
 
 
 def verify_session_ownership(
-    db: Session,
-    session_id: UUID,
-    user_id: UUID
+    db: Session, session_id: UUID, user_id: UUID
 ) -> ChatSession:
     """Verify that the user owns the session."""
-    session = db.query(ChatSession).filter(
-        ChatSession.id == session_id,
-        ChatSession.user_id == user_id,
-    ).first()
+    session = (
+        db.query(ChatSession)
+        .filter(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id,
+        )
+        .first()
+    )
 
     if not session:
         raise HTTPException(
@@ -85,8 +84,8 @@ def message_to_out(msg: Message) -> MessageOut:
         role=msg.role,
         content=msg.content,
         source_refs=source_refs,
-        status=getattr(msg, 'status', 'completed'),
-        error_message=getattr(msg, 'error_message', None),
+        status=getattr(msg, "status", "completed"),
+        error_message=getattr(msg, "error_message", None),
         created_at=msg.created_at,
     )
 
@@ -94,6 +93,7 @@ def message_to_out(msg: Message) -> MessageOut:
 # =============================================================================
 # Session Management Endpoints
 # =============================================================================
+
 
 @router.post("/sessions/{notebook_id}", response_model=ChatSessionResponse)
 def create_session(
@@ -140,19 +140,17 @@ def list_sessions(
     verify_notebook_access(db, nb_uuid, current_user)
 
     # Get sessions with message counts
-    sessions = db.query(
-        ChatSession,
-        func.count(Message.id).label("message_count")
-    ).outerjoin(
-        Message, Message.session_id == ChatSession.id
-    ).filter(
-        ChatSession.notebook_id == nb_uuid,
-        ChatSession.user_id == current_user.id,
-    ).group_by(
-        ChatSession.id
-    ).order_by(
-        ChatSession.updated_at.desc()
-    ).all()
+    sessions = (
+        db.query(ChatSession, func.count(Message.id).label("message_count"))
+        .outerjoin(Message, Message.session_id == ChatSession.id)
+        .filter(
+            ChatSession.notebook_id == nb_uuid,
+            ChatSession.user_id == current_user.id,
+        )
+        .group_by(ChatSession.id)
+        .order_by(ChatSession.updated_at.desc())
+        .all()
+    )
 
     session_responses = [
         ChatSessionResponse(
@@ -191,9 +189,11 @@ def update_session(
     db.commit()
     db.refresh(session)
 
-    message_count = db.query(func.count(Message.id)).filter(
-        Message.session_id == session.id
-    ).scalar()
+    message_count = (
+        db.query(func.count(Message.id))
+        .filter(Message.session_id == session.id)
+        .scalar()
+    )
 
     return ChatSessionResponse(
         id=str(session.id),
@@ -226,6 +226,7 @@ def delete_session(
 # =============================================================================
 # Chat Message Endpoints
 # =============================================================================
+
 
 @router.post("", response_model=ChatResponse)
 async def chat(
@@ -383,9 +384,12 @@ def get_session_history(
     sess_uuid = parse_uuid(session_id, "Session ID")
     session = verify_session_ownership(db, sess_uuid, current_user.id)
 
-    messages = db.query(Message).filter(
-        Message.session_id == sess_uuid
-    ).order_by(Message.created_at.asc()).all()
+    messages = (
+        db.query(Message)
+        .filter(Message.session_id == sess_uuid)
+        .order_by(Message.created_at.asc())
+        .all()
+    )
 
     return ChatHistoryResponse(
         session_id=str(session.id),
@@ -456,6 +460,7 @@ def clear_chat_history(
 # =============================================================================
 # Async Chat Endpoints
 # =============================================================================
+
 
 @router.post("/async", response_model=AsyncChatResponse)
 async def chat_async(
@@ -589,9 +594,9 @@ def get_message_status(
 
     # Verify user access through session or notebook
     if message.session_id:
-        session = db.query(ChatSession).filter(
-            ChatSession.id == message.session_id
-        ).first()
+        session = (
+            db.query(ChatSession).filter(ChatSession.id == message.session_id).first()
+        )
         if session and session.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -611,8 +616,8 @@ def get_message_status(
 
     return MessageStatusResponse(
         message_id=str(message.id),
-        status=getattr(message, 'status', 'completed'),
+        status=getattr(message, "status", "completed"),
         content=message.content if message.content else None,
         source_refs=source_refs,
-        error_message=getattr(message, 'error_message', None),
+        error_message=getattr(message, "error_message", None),
     )

@@ -1,9 +1,11 @@
 """Slide Generator models for PowerPoint generation."""
+
 import uuid
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.sql import func
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -14,6 +16,7 @@ class SlideProject(Base):
 
     Each project contains source text and generated slides.
     """
+
     __tablename__ = "slide_projects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -68,6 +71,7 @@ class SlideContent(Base):
 
     Each slide has a title, content (bullets, details), and speaker notes.
     """
+
     __tablename__ = "slide_contents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -78,7 +82,9 @@ class SlideContent(Base):
         index=True,
     )
     slide_number = Column(Integer, nullable=False)
-    slide_type = Column(String(50), default="content")  # title, content, section, conclusion
+    slide_type = Column(
+        String(50), default="content"
+    )  # title, content, section, conclusion
     title = Column(String(500), nullable=False)
     content = Column(JSONB, nullable=False, default=dict)
     # content structure:
@@ -103,6 +109,7 @@ class SlideMessage(Base):
 
     Stores user instructions and assistant responses.
     """
+
     __tablename__ = "slide_messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -126,6 +133,7 @@ class SlideTemplate(Base):
 
     Templates are .pptx files used as base for generated slides.
     """
+
     __tablename__ = "slide_templates"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -154,6 +162,7 @@ class SlideStyle(Base):
 
     Styles define colors, fonts, and layout preferences.
     """
+
     __tablename__ = "slide_styles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

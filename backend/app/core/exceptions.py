@@ -6,17 +6,20 @@ This module provides a consistent error handling system with:
 - Error codes for programmatic error handling
 - User-friendly Japanese error messages
 """
-from fastapi import Request, status
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
+
 import logging
 from enum import Enum
+
+from fastapi import Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
 
 class ErrorCode(str, Enum):
     """Error codes for programmatic error handling."""
+
     # General errors
     UNKNOWN_ERROR = "UNKNOWN_ERROR"
     VALIDATION_ERROR = "VALIDATION_ERROR"
@@ -65,13 +68,19 @@ class NotFoundError(AppException):
     """Resource not found."""
 
     def __init__(self, message: str = "リソースが見つかりません"):
-        super().__init__(message, status.HTTP_404_NOT_FOUND, error_code=ErrorCode.NOT_FOUND)
+        super().__init__(
+            message, status.HTTP_404_NOT_FOUND, error_code=ErrorCode.NOT_FOUND
+        )
 
 
 class UnauthorizedError(AppException):
     """Authentication required."""
 
-    def __init__(self, message: str = "認証が必要です", error_code: ErrorCode = ErrorCode.UNAUTHORIZED):
+    def __init__(
+        self,
+        message: str = "認証が必要です",
+        error_code: ErrorCode = ErrorCode.UNAUTHORIZED,
+    ):
         super().__init__(message, status.HTTP_401_UNAUTHORIZED, error_code=error_code)
 
 
@@ -79,13 +88,19 @@ class ForbiddenError(AppException):
     """Access denied."""
 
     def __init__(self, message: str = "アクセスが拒否されました"):
-        super().__init__(message, status.HTTP_403_FORBIDDEN, error_code=ErrorCode.FORBIDDEN)
+        super().__init__(
+            message, status.HTTP_403_FORBIDDEN, error_code=ErrorCode.FORBIDDEN
+        )
 
 
 class BadRequestError(AppException):
     """Invalid request."""
 
-    def __init__(self, message: str = "無効なリクエストです", error_code: ErrorCode = ErrorCode.BAD_REQUEST):
+    def __init__(
+        self,
+        message: str = "無効なリクエストです",
+        error_code: ErrorCode = ErrorCode.BAD_REQUEST,
+    ):
         super().__init__(message, status.HTTP_400_BAD_REQUEST, error_code=error_code)
 
 
@@ -93,21 +108,36 @@ class LLMConnectionError(AppException):
     """LLM server connection error."""
 
     def __init__(self, message: str = "LLMサーバーへの接続に失敗しました"):
-        super().__init__(message, status.HTTP_503_SERVICE_UNAVAILABLE, error_code=ErrorCode.LLM_CONNECTION_ERROR)
+        super().__init__(
+            message,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            error_code=ErrorCode.LLM_CONNECTION_ERROR,
+        )
 
 
 class EmbeddingError(AppException):
     """Embedding generation error."""
 
     def __init__(self, message: str = "埋め込みベクトルの生成に失敗しました"):
-        super().__init__(message, status.HTTP_503_SERVICE_UNAVAILABLE, error_code=ErrorCode.EMBEDDING_ERROR)
+        super().__init__(
+            message,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            error_code=ErrorCode.EMBEDDING_ERROR,
+        )
 
 
 class RateLimitError(AppException):
     """Rate limit exceeded."""
 
-    def __init__(self, message: str = "リクエスト制限を超過しました。しばらく経ってから再試行してください。"):
-        super().__init__(message, status.HTTP_429_TOO_MANY_REQUESTS, error_code=ErrorCode.RATE_LIMIT_EXCEEDED)
+    def __init__(
+        self,
+        message: str = "リクエスト制限を超過しました。しばらく経ってから再試行してください。",
+    ):
+        super().__init__(
+            message,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            error_code=ErrorCode.RATE_LIMIT_EXCEEDED,
+        )
 
 
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:

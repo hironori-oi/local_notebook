@@ -3,6 +3,7 @@ Council meeting management API endpoints.
 
 Provides CRUD operations for council meetings (開催回).
 """
+
 from typing import List
 from uuid import UUID
 
@@ -10,21 +11,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_council_access, parse_uuid
+from app.core.deps import (check_council_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.council import Council
-from app.models.council_meeting import CouncilMeeting
 from app.models.council_agenda_item import CouncilAgendaItem
+from app.models.council_meeting import CouncilMeeting
 from app.models.council_note import CouncilNote
 from app.models.user import User
-from app.schemas.council_meeting import (
-    CouncilMeetingCreate,
-    CouncilMeetingUpdate,
-    CouncilMeetingOut,
-    CouncilMeetingListItem,
-    CouncilMeetingDetailOut,
-)
 from app.schemas.council_agenda import CouncilAgendaOut
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.schemas.council_meeting import (CouncilMeetingCreate,
+                                         CouncilMeetingDetailOut,
+                                         CouncilMeetingListItem,
+                                         CouncilMeetingOut,
+                                         CouncilMeetingUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 router = APIRouter(prefix="/council-meetings", tags=["council-meetings"])
 
@@ -43,10 +44,7 @@ def list_council_meetings(
 
     # Build note count subquery
     note_count_subq = (
-        db.query(
-            CouncilNote.meeting_id,
-            func.count(CouncilNote.id).label("note_count")
-        )
+        db.query(CouncilNote.meeting_id, func.count(CouncilNote.id).label("note_count"))
         .filter(CouncilNote.meeting_id.isnot(None))
         .group_by(CouncilNote.meeting_id)
         .subquery()
@@ -56,7 +54,7 @@ def list_council_meetings(
     agenda_count_subq = (
         db.query(
             CouncilAgendaItem.meeting_id,
-            func.count(CouncilAgendaItem.id).label("agenda_count")
+            func.count(CouncilAgendaItem.id).label("agenda_count"),
         )
         .group_by(CouncilAgendaItem.meeting_id)
         .subquery()
@@ -75,7 +73,9 @@ def list_council_meetings(
             func.coalesce(agenda_count_subq.c.agenda_count, 0).label("agenda_count"),
         )
         .outerjoin(note_count_subq, CouncilMeeting.id == note_count_subq.c.meeting_id)
-        .outerjoin(agenda_count_subq, CouncilMeeting.id == agenda_count_subq.c.meeting_id)
+        .outerjoin(
+            agenda_count_subq, CouncilMeeting.id == agenda_count_subq.c.meeting_id
+        )
         .filter(CouncilMeeting.council_id == council_uuid)
         .order_by(CouncilMeeting.scheduled_at.desc())
     )
@@ -84,17 +84,19 @@ def list_council_meetings(
 
     meetings = []
     for row in results:
-        meetings.append(CouncilMeetingListItem(
-            id=row.id,
-            council_id=row.council_id,
-            meeting_number=row.meeting_number,
-            title=row.title,
-            scheduled_at=row.scheduled_at,
-            agenda_count=row.agenda_count,
-            note_count=row.note_count,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        ))
+        meetings.append(
+            CouncilMeetingListItem(
+                id=row.id,
+                council_id=row.council_id,
+                meeting_number=row.meeting_number,
+                title=row.title,
+                scheduled_at=row.scheduled_at,
+                agenda_count=row.agenda_count,
+                note_count=row.note_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+        )
 
     return meetings
 
@@ -121,9 +123,12 @@ def get_council_meeting(
     check_council_access(db, meeting.council_id, current_user)
 
     # Get agenda count
-    agenda_count = db.query(func.count(CouncilAgendaItem.id)).filter(
-        CouncilAgendaItem.meeting_id == meeting.id
-    ).scalar() or 0
+    agenda_count = (
+        db.query(func.count(CouncilAgendaItem.id))
+        .filter(CouncilAgendaItem.meeting_id == meeting.id)
+        .scalar()
+        or 0
+    )
 
     return CouncilMeetingOut(
         id=meeting.id,
@@ -159,9 +164,12 @@ def get_council_meeting_detail(
     check_council_access(db, meeting.council_id, current_user)
 
     # Get note count
-    note_count = db.query(func.count(CouncilNote.id)).filter(
-        CouncilNote.meeting_id == meeting.id
-    ).scalar() or 0
+    note_count = (
+        db.query(func.count(CouncilNote.id))
+        .filter(CouncilNote.meeting_id == meeting.id)
+        .scalar()
+        or 0
+    )
 
     # Get agendas
     agendas = (
@@ -203,7 +211,11 @@ def get_council_meeting_detail(
     )
 
 
-@router.post("/council/{council_id}", response_model=CouncilMeetingOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/council/{council_id}",
+    response_model=CouncilMeetingOut,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_council_meeting(
     council_id: str,
     data: CouncilMeetingCreate,
@@ -222,10 +234,14 @@ def create_council_meeting(
     check_council_access(db, council_uuid, current_user)
 
     # Check if meeting number already exists
-    existing = db.query(CouncilMeeting).filter(
-        CouncilMeeting.council_id == council_uuid,
-        CouncilMeeting.meeting_number == data.meeting_number,
-    ).first()
+    existing = (
+        db.query(CouncilMeeting)
+        .filter(
+            CouncilMeeting.council_id == council_uuid,
+            CouncilMeeting.meeting_number == data.meeting_number,
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -294,13 +310,20 @@ def update_council_meeting(
 
     update_details = {}
 
-    if data.meeting_number is not None and data.meeting_number != meeting.meeting_number:
+    if (
+        data.meeting_number is not None
+        and data.meeting_number != meeting.meeting_number
+    ):
         # Check if new number already exists
-        existing = db.query(CouncilMeeting).filter(
-            CouncilMeeting.council_id == meeting.council_id,
-            CouncilMeeting.meeting_number == data.meeting_number,
-            CouncilMeeting.id != meeting.id,
-        ).first()
+        existing = (
+            db.query(CouncilMeeting)
+            .filter(
+                CouncilMeeting.council_id == meeting.council_id,
+                CouncilMeeting.meeting_number == data.meeting_number,
+                CouncilMeeting.id != meeting.id,
+            )
+            .first()
+        )
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -333,9 +356,12 @@ def update_council_meeting(
         )
 
     # Get agenda count
-    agenda_count = db.query(func.count(CouncilAgendaItem.id)).filter(
-        CouncilAgendaItem.meeting_id == meeting.id
-    ).scalar() or 0
+    agenda_count = (
+        db.query(func.count(CouncilAgendaItem.id))
+        .filter(CouncilAgendaItem.meeting_id == meeting.id)
+        .scalar()
+        or 0
+    )
 
     return CouncilMeetingOut(
         id=meeting.id,

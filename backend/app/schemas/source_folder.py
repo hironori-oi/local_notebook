@@ -1,22 +1,27 @@
 """Schemas for source folder management."""
-from typing import Optional, List
-from uuid import UUID
-from pydantic import BaseModel, Field
+
 from datetime import datetime
+from typing import List, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field
 
 
 class FolderCreate(BaseModel):
     """フォルダ作成リクエスト"""
+
     name: str = Field(..., min_length=1, max_length=255)
 
 
 class FolderUpdate(BaseModel):
     """フォルダ更新リクエスト"""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
 
 
 class FolderOut(BaseModel):
     """フォルダレスポンス"""
+
     id: UUID
     notebook_id: UUID
     name: str
@@ -31,9 +36,13 @@ class FolderOut(BaseModel):
 
 class FolderReorder(BaseModel):
     """フォルダ並び替えリクエスト"""
+
     folder_ids: List[UUID] = Field(..., description="新しい順序でのフォルダIDリスト")
 
 
 class SourceMoveRequest(BaseModel):
     """資料移動リクエスト"""
-    folder_id: Optional[UUID] = Field(None, description="移動先フォルダID（nullでルートへ）")
+
+    folder_id: Optional[UUID] = Field(
+        None, description="移動先フォルダID（nullでルートへ）"
+    )

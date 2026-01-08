@@ -1,36 +1,21 @@
 """
 Authentication API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+
+from fastapi import (APIRouter, Depends, HTTPException, Request, Response,
+                     status)
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
 from app.core.config import settings
-
+from app.core.deps import get_current_user, get_db
 from app.models.user import User
-
-from app.schemas.auth import (
-    UserRegister,
-    UserLogin,
-    Token,
-    UserOut,
-    UserWithToken,
-    PasswordChange,
-)
-from app.services.auth import (
-    authenticate_user,
-    create_user,
-    create_access_token,
-    get_user_by_username,
-    verify_password,
-    change_user_password,
-)
-from app.services.audit import (
-    log_action,
-    get_client_info,
-    AuditAction,
-    TargetType,
-)
+from app.schemas.auth import (PasswordChange, Token, UserLogin, UserOut,
+                              UserRegister, UserWithToken)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
+from app.services.auth import (authenticate_user, change_user_password,
+                               create_access_token, create_user,
+                               get_user_by_username, verify_password)
 
 # Cookie settings for secure token storage
 COOKIE_NAME = "access_token"
@@ -64,7 +49,9 @@ def clear_auth_cookie(response: Response) -> None:
     )
 
 
-@router.post("/register", response_model=UserWithToken, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=UserWithToken, status_code=status.HTTP_201_CREATED
+)
 def register(
     data: UserRegister,
     request: Request,
@@ -264,7 +251,10 @@ def change_password(
             user_id=current_user.id,
             target_type=TargetType.USER,
             target_id=str(current_user.id),
-            details={"action": "password_change_failed", "reason": "invalid_current_password"},
+            details={
+                "action": "password_change_failed",
+                "reason": "invalid_current_password",
+            },
             ip_address=ip_address,
             user_agent=user_agent,
         )

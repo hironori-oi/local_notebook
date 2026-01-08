@@ -1,9 +1,11 @@
 """Council model for managing deliberative councils (審議会)."""
+
 import uuid
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -15,6 +17,7 @@ class Council(Base):
     Councils are top-level entities that group multiple meetings,
     similar to how Notebooks group multiple sources.
     """
+
     __tablename__ = "councils"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

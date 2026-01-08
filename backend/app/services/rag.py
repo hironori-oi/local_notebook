@@ -7,30 +7,29 @@ This module handles:
 - LLM prompt construction with context
 - Streaming responses for improved UX
 """
-import logging
-from typing import List, Optional, Dict, AsyncGenerator
-from uuid import UUID
-import json
 
+import json
+import logging
+from typing import AsyncGenerator, Dict, List, Optional
+from uuid import UUID
+
+from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.orm import Session
-from sqlalchemy import select, text, func, bindparam
 from sqlalchemy.types import String
 
+from app.core.config import settings
+from app.core.exceptions import (BadRequestError, EmbeddingError,
+                                 LLMConnectionError)
+from app.models.chat_session import ChatSession
+from app.models.message import Message
+from app.models.source import Source
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.embedding import embed_texts
 from app.services.llm_client import call_llm, get_llm_client
-from app.services.rag_utils import (
-    get_conversation_history_generic,
-    update_session_timestamp,
-    build_context_text,
-    build_llm_messages,
-    format_embedding_for_pgvector,
-)
-from app.models.source import Source
-from app.models.message import Message
-from app.models.chat_session import ChatSession
-from app.core.config import settings
-from app.core.exceptions import BadRequestError, LLMConnectionError, EmbeddingError
+from app.services.rag_utils import (build_context_text, build_llm_messages,
+                                    format_embedding_for_pgvector,
+                                    get_conversation_history_generic,
+                                    update_session_timestamp)
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,9 @@ async def rag_answer(
     conversation_history = []
     if session_id:
         conversation_history = get_conversation_history(db, session_id)
-        logger.debug(f"Retrieved {len(conversation_history)} messages from session history")
+        logger.debug(
+            f"Retrieved {len(conversation_history)} messages from session history"
+        )
 
     # Save user message
     user_message = Message(
@@ -122,8 +123,7 @@ async def rag_answer(
             # SECURITY: Validate all source_ids belong to the specified notebook
             valid_count = db.execute(
                 select(func.count(Source.id)).where(
-                    Source.id.in_(source_ids),
-                    Source.notebook_id == notebook_uuid
+                    Source.id.in_(source_ids), Source.notebook_id == notebook_uuid
                 )
             ).scalar()
 
@@ -160,9 +160,7 @@ async def rag_answer(
             )
 
         # Get formatted_text from sources
-        sources = db.query(Source).filter(
-            Source.id.in_(source_ids)
-        ).all()
+        sources = db.query(Source).filter(Source.id.in_(source_ids)).all()
 
         contexts: List[str] = []
         source_refs: List[str] = []
@@ -199,7 +197,10 @@ async def rag_answer(
         # Truncate if too long (to avoid context window limits)
         max_context_chars = 30000  # Adjust based on model's context window
         if len(context_text) > max_context_chars:
-            context_text = context_text[:max_context_chars] + "\n\n[...テキストが長いため一部省略...]"
+            context_text = (
+                context_text[:max_context_chars]
+                + "\n\n[...テキストが長いため一部省略...]"
+            )
 
         # Build system prompt for formatted text mode
         system_prompt = (
@@ -312,8 +313,7 @@ async def rag_answer(
         # SECURITY: Validate all source_ids belong to the specified notebook
         valid_count = db.execute(
             select(func.count(Source.id)).where(
-                Source.id.in_(source_ids),
-                Source.notebook_id == notebook_uuid
+                Source.id.in_(source_ids), Source.notebook_id == notebook_uuid
             )
         ).scalar()
 
@@ -325,9 +325,7 @@ async def rag_answer(
                 "指定されたソースIDの一部がこのノートブックに存在しません"
             )
     else:
-        rows = db.execute(
-            select(Source.id).where(Source.notebook_id == notebook_uuid)
-        )
+        rows = db.execute(select(Source.id).where(Source.notebook_id == notebook_uuid))
         source_ids = [row[0] for row in rows]
 
     if not source_ids:
@@ -395,7 +393,9 @@ async def rag_answer(
     for _id, content, page_number, title, similarity in rows:
         # Filter out low-similarity results for better answer quality
         if similarity < similarity_threshold:
-            logger.debug(f"Skipping chunk from {title} with low similarity: {similarity:.2%}")
+            logger.debug(
+                f"Skipping chunk from {title} with low similarity: {similarity:.2%}"
+            )
             continue
 
         # Build context with source attribution and relevance indicator
@@ -560,17 +560,16 @@ async def rag_answer_stream(
         source_ids = [UUID(sid) for sid in req.source_ids]
         valid_count = db.execute(
             select(func.count(Source.id)).where(
-                Source.id.in_(source_ids),
-                Source.notebook_id == notebook_uuid
+                Source.id.in_(source_ids), Source.notebook_id == notebook_uuid
             )
         ).scalar()
 
         if valid_count != len(source_ids):
-            raise BadRequestError("指定されたソースIDの一部がこのノートブックに存在しません")
+            raise BadRequestError(
+                "指定されたソースIDの一部がこのノートブックに存在しません"
+            )
     else:
-        rows = db.execute(
-            select(Source.id).where(Source.notebook_id == notebook_uuid)
-        )
+        rows = db.execute(select(Source.id).where(Source.notebook_id == notebook_uuid))
         source_ids = [row[0] for row in rows]
 
     if not source_ids:

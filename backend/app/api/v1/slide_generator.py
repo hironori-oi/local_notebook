@@ -1,60 +1,34 @@
 """
 Slide Generator API - Generate PowerPoint presentations from text.
 """
-import logging
+
 import json
+import logging
 from pathlib import Path
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import (
-    APIRouter,
-    UploadFile,
-    File,
-    Form,
-    HTTPException,
-    Depends,
-    Query,
-    BackgroundTasks,
-    status,
-)
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
+                     HTTPException, Query, UploadFile, status)
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
-from app.core.config import settings
-from app.models.user import User
-from app.models.slide_project import (
-    SlideProject,
-    SlideContent,
-    SlideMessage,
-    SlideTemplate,
-    SlideStyle,
-)
-from app.schemas.slide_generator import (
-    ProjectCreate,
-    ProjectSummary,
-    ProjectDetail,
-    ProjectListResponse,
-    SlideOut,
-    SlideUpdate,
-    MessageOut,
-    RefineRequest,
-    RefineResponse,
-    TemplateOut,
-    TemplateListResponse,
-    StyleCreate,
-    StyleUpdate,
-    StyleOut,
-    StyleListResponse,
-)
-from app.services.slide_generator import (
-    generate_slides,
-    refine_slides,
-)
 from app.celery_app.tasks.slide import enqueue_slide_generation
-from app.services.slide_builder import build_pptx_from_project
+from app.core.config import settings
+from app.core.deps import get_current_user, get_db
+from app.models.slide_project import (SlideContent, SlideMessage, SlideProject,
+                                      SlideStyle, SlideTemplate)
+from app.models.user import User
+from app.schemas.slide_generator import (MessageOut, ProjectCreate,
+                                         ProjectDetail, ProjectListResponse,
+                                         ProjectSummary, RefineRequest,
+                                         RefineResponse, SlideOut, SlideUpdate,
+                                         StyleCreate, StyleListResponse,
+                                         StyleOut, StyleUpdate,
+                                         TemplateListResponse, TemplateOut)
 from app.services.pptx_extractor import get_slide_count
+from app.services.slide_builder import build_pptx_from_project
+from app.services.slide_generator import generate_slides, refine_slides
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +39,10 @@ router = APIRouter(prefix="/slide-generator", tags=["slide-generator"])
 # Project endpoints
 # =============================================================================
 
-@router.post("/projects", response_model=ProjectDetail, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/projects", response_model=ProjectDetail, status_code=status.HTTP_201_CREATED
+)
 async def create_project(
     request: ProjectCreate,
     background_tasks: BackgroundTasks,
@@ -124,10 +101,7 @@ async def list_projects(
     total = query.count()
 
     projects = (
-        query.order_by(SlideProject.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
+        query.order_by(SlideProject.created_at.desc()).offset(offset).limit(limit).all()
     )
 
     if not projects:
@@ -135,12 +109,12 @@ async def list_projects(
 
     # Batch fetch slide counts to avoid N+1 queries
     project_ids = [p.id for p in projects]
-    slide_counts = db.query(
-        SlideContent.project_id,
-        func.count(SlideContent.id).label("count")
-    ).filter(
-        SlideContent.project_id.in_(project_ids)
-    ).group_by(SlideContent.project_id).all()
+    slide_counts = (
+        db.query(SlideContent.project_id, func.count(SlideContent.id).label("count"))
+        .filter(SlideContent.project_id.in_(project_ids))
+        .group_by(SlideContent.project_id)
+        .all()
+    )
 
     count_map = {row.project_id: row.count for row in slide_counts}
 
@@ -244,6 +218,7 @@ async def delete_project(
 # Slide endpoints
 # =============================================================================
 
+
 @router.patch("/projects/{project_id}/slides/{slide_number}", response_model=SlideOut)
 async def update_slide(
     project_id: str,
@@ -292,6 +267,7 @@ async def update_slide(
 # =============================================================================
 # Refinement endpoints
 # =============================================================================
+
 
 @router.post("/projects/{project_id}/refine", response_model=RefineResponse)
 async def refine_project_slides(
@@ -391,12 +367,15 @@ async def refine_project_slides(
 
     except Exception as e:
         logger.error(f"Refinement failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"スライドの更新に失敗しました: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"スライドの更新に失敗しました: {str(e)}"
+        )
 
 
 # =============================================================================
 # Export endpoints
 # =============================================================================
+
 
 @router.post("/projects/{project_id}/export")
 async def export_project(
@@ -422,7 +401,9 @@ async def export_project(
     )
 
     if not slides:
-        raise HTTPException(status_code=400, detail="エクスポートするスライドがありません")
+        raise HTTPException(
+            status_code=400, detail="エクスポートするスライドがありません"
+        )
 
     slide_data = [
         {
@@ -437,14 +418,20 @@ async def export_project(
     # Get template path if set
     template_path = None
     if project.template_id:
-        template = db.query(SlideTemplate).filter(SlideTemplate.id == project.template_id).first()
+        template = (
+            db.query(SlideTemplate)
+            .filter(SlideTemplate.id == project.template_id)
+            .first()
+        )
         if template:
             template_path = template.file_path
 
     # Get style settings if set
     style = None
     if project.style_id:
-        style_record = db.query(SlideStyle).filter(SlideStyle.id == project.style_id).first()
+        style_record = (
+            db.query(SlideStyle).filter(SlideStyle.id == project.style_id).first()
+        )
         if style_record:
             style = style_record.settings
 
@@ -456,7 +443,9 @@ async def export_project(
         )
     except Exception as e:
         logger.error(f"PPTX export failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"エクスポートに失敗しました: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"エクスポートに失敗しました: {str(e)}"
+        )
 
     filename = f"{project.title}.pptx"
 
@@ -471,7 +460,10 @@ async def export_project(
 # Template endpoints
 # =============================================================================
 
-@router.post("/templates", response_model=TemplateOut, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/templates", response_model=TemplateOut, status_code=status.HTTP_201_CREATED
+)
 async def upload_template(
     name: str = Form(...),
     description: Optional[str] = Form(None),
@@ -482,7 +474,9 @@ async def upload_template(
     """Upload a PowerPoint template."""
     # Validate file type
     if not file.filename or not file.filename.endswith(".pptx"):
-        raise HTTPException(status_code=400, detail="pptxファイルのみアップロード可能です")
+        raise HTTPException(
+            status_code=400, detail="pptxファイルのみアップロード可能です"
+        )
 
     content = await file.read()
 
@@ -494,10 +488,13 @@ async def upload_template(
     try:
         slide_count = get_slide_count(content)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"テンプレートの解析に失敗しました: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"テンプレートの解析に失敗しました: {str(e)}"
+        )
 
     # Save file
     import uuid
+
     template_id = uuid.uuid4()
     upload_dir = Path(settings.UPLOAD_DIR) / "templates"
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -571,6 +568,7 @@ async def delete_template(
 # =============================================================================
 # Style endpoints
 # =============================================================================
+
 
 @router.post("/styles", response_model=StyleOut, status_code=status.HTTP_201_CREATED)
 async def create_style(

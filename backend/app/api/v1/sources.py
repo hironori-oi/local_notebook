@@ -1,35 +1,35 @@
 import logging
+import uuid
 from pathlib import Path
 from typing import List
 from uuid import UUID
-import uuid
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, Query, status, BackgroundTasks
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
+                     HTTPException, Query, Request, UploadFile, status)
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access
+from app.celery_app.tasks.content import enqueue_source_processing
 from app.core.config import settings
+from app.core.deps import check_notebook_access, get_current_user, get_db
 from app.core.exceptions import BadRequestError
+from app.models.notebook import Notebook
 from app.models.source import Source
 from app.models.source_chunk import SourceChunk
 from app.models.source_folder import SourceFolder
-from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.source import SourceUploadResponse, SourceOut, SourceUpdate, SourceDetailOut, SourceSummaryUpdate, SourceListResponse
+from app.schemas.source import (SourceDetailOut, SourceListResponse, SourceOut,
+                                SourceSummaryUpdate, SourceUpdate,
+                                SourceUploadResponse)
 from app.schemas.source_folder import SourceMoveRequest
-from app.services.text_extractor import (
-    extract_text_from_pdf,
-    extract_text_from_docx,
-    extract_text_from_txt,
-)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.embedding import embed_texts
+from app.services.file_validator import (FileValidationError,
+                                         validate_uploaded_file)
 from app.services.text_chunker import chunk_pages_with_overlap
-from app.services.file_validator import (
-    validate_uploaded_file,
-    FileValidationError,
-)
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
-from app.celery_app.tasks.content import enqueue_source_processing
+from app.services.text_extractor import (extract_text_from_docx,
+                                         extract_text_from_pdf,
+                                         extract_text_from_txt)
 
 logger = logging.getLogger(__name__)
 
@@ -188,10 +188,14 @@ async def upload_source(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="無効なフォルダIDです",
             )
-        folder = db.query(SourceFolder).filter(
-            SourceFolder.id == folder_uuid,
-            SourceFolder.notebook_id == nb_uuid,
-        ).first()
+        folder = (
+            db.query(SourceFolder)
+            .filter(
+                SourceFolder.id == folder_uuid,
+                SourceFolder.notebook_id == nb_uuid,
+            )
+            .first()
+        )
         if not folder:
             if dest_path.exists():
                 dest_path.unlink()
@@ -251,8 +255,8 @@ async def upload_source(
     # Split into chunks with semantic boundaries and overlap
     chunk_results = chunk_pages_with_overlap(
         page_texts=page_texts,
-        chunk_size=2000,   # Smaller chunks for better retrieval precision
-        overlap=200,       # 200 char overlap to maintain context across boundaries
+        chunk_size=2000,  # Smaller chunks for better retrieval precision
+        overlap=200,  # 200 char overlap to maintain context across boundaries
     )
 
     chunks: List[SourceChunk] = []
@@ -291,7 +295,9 @@ async def upload_source(
     # Trigger background processing for formatting and summary generation
     if full_text.strip():
         task_id = enqueue_source_processing(source.id, full_text)
-        logger.info(f"Source processing enqueued: {source.id}, celery_task_id={task_id}")
+        logger.info(
+            f"Source processing enqueued: {source.id}, celery_task_id={task_id}"
+        )
 
     # Log source upload
     ip_address, user_agent = get_client_info(request)
@@ -319,7 +325,9 @@ async def upload_source(
     # Get folder name if source is in a folder
     folder_name = None
     if source.folder_id:
-        folder = db.query(SourceFolder).filter(SourceFolder.id == source.folder_id).first()
+        folder = (
+            db.query(SourceFolder).filter(SourceFolder.id == source.folder_id).first()
+        )
         if folder:
             folder_name = folder.name
 
@@ -380,7 +388,9 @@ def update_source(
     # Get folder name if source is in a folder
     folder_name = None
     if source.folder_id:
-        folder = db.query(SourceFolder).filter(SourceFolder.id == source.folder_id).first()
+        folder = (
+            db.query(SourceFolder).filter(SourceFolder.id == source.folder_id).first()
+        )
         if folder:
             folder_name = folder.name
 
@@ -587,10 +597,14 @@ def move_source(
     # Validate folder_id if provided
     folder_name = None
     if data.folder_id:
-        folder = db.query(SourceFolder).filter(
-            SourceFolder.id == data.folder_id,
-            SourceFolder.notebook_id == source.notebook_id,
-        ).first()
+        folder = (
+            db.query(SourceFolder)
+            .filter(
+                SourceFolder.id == data.folder_id,
+                SourceFolder.notebook_id == source.notebook_id,
+            )
+            .first()
+        )
         if not folder:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -603,7 +617,9 @@ def move_source(
     db.commit()
     db.refresh(source)
 
-    logger.info(f"Source moved: {source_id} to folder {data.folder_id} by user {current_user.id}")
+    logger.info(
+        f"Source moved: {source_id} to folder {data.folder_id} by user {current_user.id}"
+    )
 
     return SourceOut(
         id=source.id,

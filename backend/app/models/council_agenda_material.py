@@ -1,9 +1,11 @@
 """CouncilAgendaMaterial model for managing multiple materials per agenda item."""
+
 import uuid
-from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -15,6 +17,7 @@ class CouncilAgendaMaterial(Base):
     Each agenda item can have multiple materials, each with its own URL,
     processed text, summary, and processing status.
     """
+
     __tablename__ = "council_agenda_materials"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -35,9 +38,7 @@ class CouncilAgendaMaterial(Base):
     summary = Column(Text, nullable=True)  # 資料要約
 
     # Processing status tracking (pending/processing/completed/failed)
-    processing_status = Column(
-        String(20), nullable=False, default="pending"
-    )
+    processing_status = Column(String(20), nullable=False, default="pending")
     processing_error = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

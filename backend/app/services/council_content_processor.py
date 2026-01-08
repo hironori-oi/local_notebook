@@ -8,24 +8,26 @@ This module handles:
 4. Chunk creation with embeddings for RAG
 5. Background task processing
 """
+
 import logging
 import re
 import uuid
-from typing import Optional, Literal, List
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.exceptions import LLMConnectionError
 from app.db.session import SessionLocal
-from app.models.council_agenda_item import CouncilAgendaItem
 from app.models.council_agenda_chunk import CouncilAgendaChunk
+from app.models.council_agenda_item import CouncilAgendaItem
 from app.models.council_agenda_material import CouncilAgendaMaterial
 from app.models.llm_settings import LLMSettings
-from app.services.url_content_fetcher import fetch_url_with_retry, URLContentFetchError
-from app.services.llm_client import call_generation_llm
 from app.services.embedding import get_embedding_client
-from app.core.exceptions import LLMConnectionError
-from app.core.config import settings
+from app.services.llm_client import call_generation_llm
+from app.services.url_content_fetcher import (URLContentFetchError,
+                                              fetch_url_with_retry)
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +191,10 @@ COUNCIL_MINUTES_SUMMARY_USER_TEMPLATE = """以下の審議会議事録を日本�
 # Prompt Helpers
 # =============================================================================
 
-def get_custom_prompts(db: Session, content_type: Literal["materials", "minutes"]) -> tuple[Optional[str], Optional[str]]:
+
+def get_custom_prompts(
+    db: Session, content_type: Literal["materials", "minutes"]
+) -> tuple[Optional[str], Optional[str]]:
     """
     Get custom prompts from LLM settings.
 
@@ -201,7 +206,9 @@ def get_custom_prompts(db: Session, content_type: Literal["materials", "minutes"
         Tuple of (system_prompt, user_template), both can be None if using defaults
     """
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -222,6 +229,7 @@ def get_custom_prompts(db: Session, content_type: Literal["materials", "minutes"
 # Text Processing Functions
 # =============================================================================
 
+
 def _format_text_regex(raw_text: str) -> str:
     """
     Format text using regex-based rules only.
@@ -233,36 +241,38 @@ def _format_text_regex(raw_text: str) -> str:
     text = raw_text
 
     # Normalize line endings
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     # Remove trailing whitespace from each line
-    text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
+    text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
 
     # Reduce excessive blank lines (3+ -> 2)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     # Fix unnatural line breaks within Japanese sentences
     text = re.sub(
-        r'([^\n\s。．.!！?？、，,\-\*\•\d])[\n]([^\n\s\-\*\•\d・①②③④⑤⑥⑦⑧⑨⑩])',
-        r'\1\2',
-        text
+        r"([^\n\s。．.!！?？、，,\-\*\•\d])[\n]([^\n\s\-\*\•\d・①②③④⑤⑥⑦⑧⑨⑩])",
+        r"\1\2",
+        text,
     )
 
     # Fix line breaks after common Japanese particles
-    text = re.sub(r'(の|を|に|へ|と|で|が|は|も|や)\n([^\n])', r'\1\2', text)
+    text = re.sub(r"(の|を|に|へ|と|で|が|は|も|や)\n([^\n])", r"\1\2", text)
 
     # Remove page number patterns
-    text = re.sub(r'\n\s*-\s*\d+\s*-\s*\n', '\n', text)
-    text = re.sub(r'\n\s*\d+\s*/\s*\d+\s*\n', '\n', text)
-    text = re.sub(r'\n\s*Page\s*\d+\s*\n', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r"\n\s*-\s*\d+\s*-\s*\n", "\n", text)
+    text = re.sub(r"\n\s*\d+\s*/\s*\d+\s*\n", "\n", text)
+    text = re.sub(r"\n\s*Page\s*\d+\s*\n", "\n", text, flags=re.IGNORECASE)
 
     # Normalize multiple spaces within lines
-    text = re.sub(r'[ \t]{2,}', ' ', text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
 
     return text.strip()
 
 
-def _split_into_chunks(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
+def _split_into_chunks(
+    text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+) -> List[str]:
     """
     Split text into overlapping chunks for RAG embedding.
 
@@ -291,7 +301,7 @@ def _split_into_chunks(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = C
             search_text = text[search_start:end]
 
             # Find the last sentence boundary
-            for pattern in ['。', '！', '？', '.\n', '\n\n']:
+            for pattern in ["。", "！", "？", ".\n", "\n\n"]:
                 last_idx = search_text.rfind(pattern)
                 if last_idx != -1:
                     end = search_start + last_idx + len(pattern)
@@ -310,6 +320,7 @@ def _split_into_chunks(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = C
 # =============================================================================
 # Core Processing Functions
 # =============================================================================
+
 
 async def generate_council_summary(
     text: str,
@@ -338,15 +349,33 @@ async def generate_council_summary(
     # Truncate if too long
     text_to_summarize = text[:MAX_TEXT_LENGTH]
     if len(text) > MAX_TEXT_LENGTH:
-        logger.warning(f"Text truncated for summarization: {len(text)} -> {MAX_TEXT_LENGTH}")
+        logger.warning(
+            f"Text truncated for summarization: {len(text)} -> {MAX_TEXT_LENGTH}"
+        )
 
     # Choose prompts based on content type, use custom if provided
     if content_type == "minutes":
-        system_prompt = custom_system_prompt if custom_system_prompt else COUNCIL_MINUTES_SUMMARY_SYSTEM_PROMPT
-        user_template = custom_user_template if custom_user_template else COUNCIL_MINUTES_SUMMARY_USER_TEMPLATE
+        system_prompt = (
+            custom_system_prompt
+            if custom_system_prompt
+            else COUNCIL_MINUTES_SUMMARY_SYSTEM_PROMPT
+        )
+        user_template = (
+            custom_user_template
+            if custom_user_template
+            else COUNCIL_MINUTES_SUMMARY_USER_TEMPLATE
+        )
     else:
-        system_prompt = custom_system_prompt if custom_system_prompt else COUNCIL_SUMMARY_SYSTEM_PROMPT
-        user_template = custom_user_template if custom_user_template else COUNCIL_SUMMARY_USER_TEMPLATE
+        system_prompt = (
+            custom_system_prompt
+            if custom_system_prompt
+            else COUNCIL_SUMMARY_SYSTEM_PROMPT
+        )
+        user_template = (
+            custom_user_template
+            if custom_user_template
+            else COUNCIL_SUMMARY_USER_TEMPLATE
+        )
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -391,7 +420,9 @@ async def create_agenda_chunks(
         CouncilAgendaChunk.chunk_type == chunk_type,
     )
     if material_id:
-        delete_query = delete_query.filter(CouncilAgendaChunk.material_id == material_id)
+        delete_query = delete_query.filter(
+            CouncilAgendaChunk.material_id == material_id
+        )
     delete_query.delete()
 
     # Split into chunks
@@ -432,6 +463,7 @@ async def create_agenda_chunks(
 # Agenda Content Processing
 # =============================================================================
 
+
 async def process_agenda_materials(
     db: Session,
     agenda_id: UUID,
@@ -449,7 +481,9 @@ async def process_agenda_materials(
         db: Database session
         agenda_id: Agenda item UUID
     """
-    agenda = db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    agenda = (
+        db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    )
     if not agenda:
         logger.error(f"Agenda item not found: {agenda_id}")
         return
@@ -478,15 +512,20 @@ async def process_agenda_materials(
             # Get custom prompts from settings
             custom_system, custom_user = get_custom_prompts(db, "materials")
             summary = await generate_council_summary(
-                formatted_text, "materials",
+                formatted_text,
+                "materials",
                 custom_system_prompt=custom_system,
-                custom_user_template=custom_user
+                custom_user_template=custom_user,
             )
             agenda.materials_summary = summary
             logger.info(f"Summary generated: {len(summary)} chars")
         except LLMConnectionError as e:
             logger.warning(f"Summary generation failed: {e}")
-            agenda.materials_summary = formatted_text[:3000] + "..." if len(formatted_text) > 3000 else formatted_text
+            agenda.materials_summary = (
+                formatted_text[:3000] + "..."
+                if len(formatted_text) > 3000
+                else formatted_text
+            )
             agenda.processing_error = f"Materials summary generation failed: {str(e)}"
 
         # Step 4: Create chunks
@@ -525,7 +564,9 @@ async def process_agenda_minutes(
         db: Database session
         agenda_id: Agenda item UUID
     """
-    agenda = db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    agenda = (
+        db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    )
     if not agenda:
         logger.error(f"Agenda item not found: {agenda_id}")
         return
@@ -554,16 +595,23 @@ async def process_agenda_minutes(
             # Get custom prompts from settings
             custom_system, custom_user = get_custom_prompts(db, "minutes")
             summary = await generate_council_summary(
-                formatted_text, "minutes",
+                formatted_text,
+                "minutes",
                 custom_system_prompt=custom_system,
-                custom_user_template=custom_user
+                custom_user_template=custom_user,
             )
             agenda.minutes_summary = summary
             logger.info(f"Summary generated: {len(summary)} chars")
         except LLMConnectionError as e:
             logger.warning(f"Summary generation failed: {e}")
-            agenda.minutes_summary = formatted_text[:3000] + "..." if len(formatted_text) > 3000 else formatted_text
-            agenda.processing_error = (agenda.processing_error or "") + f" Minutes summary generation failed: {str(e)}"
+            agenda.minutes_summary = (
+                formatted_text[:3000] + "..."
+                if len(formatted_text) > 3000
+                else formatted_text
+            )
+            agenda.processing_error = (
+                agenda.processing_error or ""
+            ) + f" Minutes summary generation failed: {str(e)}"
 
         # Step 4: Create chunks
         await create_agenda_chunks(db, agenda_id, formatted_text, "minutes")
@@ -575,12 +623,16 @@ async def process_agenda_minutes(
     except URLContentFetchError as e:
         logger.error(f"Minutes fetch failed: {e}")
         agenda.minutes_processing_status = "failed"
-        agenda.processing_error = (agenda.processing_error or "") + f" Minutes fetch failed: {str(e)}"
+        agenda.processing_error = (
+            agenda.processing_error or ""
+        ) + f" Minutes fetch failed: {str(e)}"
         db.commit()
     except Exception as e:
         logger.error(f"Minutes processing failed: {e}", exc_info=True)
         agenda.minutes_processing_status = "failed"
-        agenda.processing_error = (agenda.processing_error or "") + f" Minutes processing failed: {str(e)}"
+        agenda.processing_error = (
+            agenda.processing_error or ""
+        ) + f" Minutes processing failed: {str(e)}"
         db.commit()
 
 
@@ -625,19 +677,26 @@ async def process_single_material(
             # Get custom prompts from settings
             custom_system, custom_user = get_custom_prompts(db, "materials")
             summary = await generate_council_summary(
-                formatted_text, "materials",
+                formatted_text,
+                "materials",
                 custom_system_prompt=custom_system,
-                custom_user_template=custom_user
+                custom_user_template=custom_user,
             )
             material.summary = summary
             logger.info(f"Summary generated: {len(summary)} chars")
         except LLMConnectionError as e:
             logger.warning(f"Summary generation failed: {e}")
-            material.summary = formatted_text[:3000] + "..." if len(formatted_text) > 3000 else formatted_text
+            material.summary = (
+                formatted_text[:3000] + "..."
+                if len(formatted_text) > 3000
+                else formatted_text
+            )
             material.processing_error = f"Summary generation failed: {str(e)}"
 
         # Step 4: Create chunks
-        await create_agenda_chunks(db, material.agenda_id, formatted_text, "materials", material.id)
+        await create_agenda_chunks(
+            db, material.agenda_id, formatted_text, "materials", material.id
+        )
 
         material.processing_status = "completed"
         db.commit()
@@ -666,7 +725,9 @@ async def process_agenda_materials_new(
         db: Database session
         agenda_id: Agenda item UUID
     """
-    agenda = db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    agenda = (
+        db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    )
     if not agenda:
         logger.error(f"Agenda item not found: {agenda_id}")
         return
@@ -708,6 +769,7 @@ async def process_agenda_content(
 # =============================================================================
 # Background Task Wrappers
 # =============================================================================
+
 
 async def process_agenda_content_background(agenda_id: UUID) -> None:
     """
@@ -759,10 +821,16 @@ async def regenerate_agenda_summary_background(
         agenda_id: Agenda item UUID
         content_type: Which summaries to regenerate
     """
-    logger.info(f"Starting summary regeneration for agenda {agenda_id} ({content_type})")
+    logger.info(
+        f"Starting summary regeneration for agenda {agenda_id} ({content_type})"
+    )
     db = SessionLocal()
     try:
-        agenda = db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+        agenda = (
+            db.query(CouncilAgendaItem)
+            .filter(CouncilAgendaItem.id == agenda_id)
+            .first()
+        )
         if not agenda:
             logger.error(f"Agenda item not found: {agenda_id}")
             return
@@ -777,16 +845,19 @@ async def regenerate_agenda_summary_background(
                     # Get custom prompts from settings
                     custom_system, custom_user = get_custom_prompts(db, "materials")
                     summary = await generate_council_summary(
-                        agenda.materials_text, "materials",
+                        agenda.materials_text,
+                        "materials",
                         custom_system_prompt=custom_system,
-                        custom_user_template=custom_user
+                        custom_user_template=custom_user,
                     )
                     agenda.materials_summary = summary
                     agenda.materials_processing_status = "completed"
                     logger.info(f"Materials summary regenerated: {len(summary)} chars")
                 except Exception as e:
                     agenda.materials_processing_status = "failed"
-                    agenda.processing_error = f"Materials summary regeneration failed: {str(e)}"
+                    agenda.processing_error = (
+                        f"Materials summary regeneration failed: {str(e)}"
+                    )
                     logger.error(f"Materials summary regeneration failed: {e}")
                 db.commit()
             else:
@@ -806,16 +877,19 @@ async def regenerate_agenda_summary_background(
                     # Get custom prompts from settings
                     custom_system, custom_user = get_custom_prompts(db, "minutes")
                     summary = await generate_council_summary(
-                        agenda.minutes_text, "minutes",
+                        agenda.minutes_text,
+                        "minutes",
                         custom_system_prompt=custom_system,
-                        custom_user_template=custom_user
+                        custom_user_template=custom_user,
                     )
                     agenda.minutes_summary = summary
                     agenda.minutes_processing_status = "completed"
                     logger.info(f"Minutes summary regenerated: {len(summary)} chars")
                 except Exception as e:
                     agenda.minutes_processing_status = "failed"
-                    agenda.processing_error = (agenda.processing_error or "") + f" Minutes summary regeneration failed: {str(e)}"
+                    agenda.processing_error = (
+                        agenda.processing_error or ""
+                    ) + f" Minutes summary regeneration failed: {str(e)}"
                     logger.error(f"Minutes summary regeneration failed: {e}")
                 db.commit()
             else:

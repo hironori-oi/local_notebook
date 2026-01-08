@@ -1,5 +1,5 @@
-from .pdf import extract_text_from_pdf, extract_text_from_pdf_bytes
 from .docx import extract_text_from_docx
+from .pdf import extract_text_from_pdf, extract_text_from_pdf_bytes
 from .txt import extract_text_from_txt
 
 __all__ = [

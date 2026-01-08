@@ -6,18 +6,19 @@ This module provides functions to:
 - Refine slides based on user instructions
 - Manage slide generation projects
 """
-import logging
+
 import json
-from typing import List, Dict, Optional, Any, Tuple
+import logging
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.slide_project import SlideProject, SlideContent, SlideMessage
 from app.models.llm_settings import LLMSettings
-from app.services.llm_client import call_generation_llm
+from app.models.slide_project import SlideContent, SlideMessage, SlideProject
 from app.services.json_parser import extract_json_from_response
+from app.services.llm_client import call_generation_llm
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,9 @@ SLIDE_REFINEMENT_USER_TEMPLATE = """【現在のスライド構成】
 上記の指示に基づいて、修正後のスライド構成全体をJSON形式で出力してください。"""
 
 
-def get_slide_generation_prompts(db: Optional[Session]) -> Tuple[Optional[str], Optional[str]]:
+def get_slide_generation_prompts(
+    db: Optional[Session],
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Get custom slide generation prompts from LLM settings.
 
@@ -128,7 +131,9 @@ def get_slide_generation_prompts(db: Optional[Session]) -> Tuple[Optional[str], 
         return None, None
 
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -140,7 +145,9 @@ def get_slide_generation_prompts(db: Optional[Session]) -> Tuple[Optional[str], 
     return system_prompt, user_template
 
 
-def get_slide_refinement_prompts(db: Optional[Session]) -> Tuple[Optional[str], Optional[str]]:
+def get_slide_refinement_prompts(
+    db: Optional[Session],
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Get custom slide refinement prompts from LLM settings.
 
@@ -154,7 +161,9 @@ def get_slide_refinement_prompts(db: Optional[Session]) -> Tuple[Optional[str], 
         return None, None
 
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None

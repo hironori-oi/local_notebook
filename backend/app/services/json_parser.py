@@ -5,17 +5,19 @@ This module provides robust parsing of LLM responses that may contain
 JSON data with common formatting issues like markdown code blocks,
 trailing commas, etc.
 """
+
 import json
-import re
 import logging
-from typing import TypeVar, Type
+import re
+from typing import Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
+
 from app.core.exceptions import BadRequestError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
 
 
 # Mapping of Japanese key names to English for EmailContent schema
@@ -83,15 +85,13 @@ def _map_japanese_keys(data: dict) -> dict:
                 mapped_opinions = []
                 for speaker_name, opinions in value.items():
                     if isinstance(opinions, list):
-                        mapped_opinions.append({
-                            "speaker": speaker_name,
-                            "opinions": opinions
-                        })
+                        mapped_opinions.append(
+                            {"speaker": speaker_name, "opinions": opinions}
+                        )
                     elif isinstance(opinions, str):
-                        mapped_opinions.append({
-                            "speaker": speaker_name,
-                            "opinions": [opinions]
-                        })
+                        mapped_opinions.append(
+                            {"speaker": speaker_name, "opinions": [opinions]}
+                        )
                 result[english_key] = mapped_opinions
             else:
                 result[english_key] = value
@@ -143,7 +143,9 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
     # Strategy 1: Direct JSON parse
     try:
         data = json.loads(response)
-        logger.debug(f"Direct JSON parse successful. Keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+        logger.debug(
+            f"Direct JSON parse successful. Keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}"
+        )
         # Try with key mapping for EmailContent compatibility
         mapped_data = _map_japanese_keys(data) if isinstance(data, dict) else data
         return schema.model_validate(mapped_data)
@@ -154,7 +156,7 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
         logger.warning(f"JSON parsed but validation failed. Data: {data}")
 
     # Strategy 2: Extract from ```json ... ``` code block
-    json_block_match = re.search(r'```json\s*([\s\S]*?)\s*```', response, re.IGNORECASE)
+    json_block_match = re.search(r"```json\s*([\s\S]*?)\s*```", response, re.IGNORECASE)
     if json_block_match:
         try:
             data = json.loads(json_block_match.group(1))
@@ -164,7 +166,7 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
             errors.append(f"JSON code block parse failed: {e}")
 
     # Strategy 3: Extract from generic ``` ... ``` code block
-    generic_block_match = re.search(r'```\s*([\s\S]*?)\s*```', response)
+    generic_block_match = re.search(r"```\s*([\s\S]*?)\s*```", response)
     if generic_block_match:
         try:
             data = json.loads(generic_block_match.group(1))
@@ -175,7 +177,7 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
 
     # Strategy 4: Find JSON object in the response
     # Look for content between first { and last }
-    json_object_match = re.search(r'\{[\s\S]*\}', response)
+    json_object_match = re.search(r"\{[\s\S]*\}", response)
     if json_object_match:
         json_str = json_object_match.group(0)
 
@@ -216,7 +218,7 @@ def _clean_json_string(json_str: str) -> str:
         Cleaned JSON string
     """
     # Remove trailing commas before ] or }
-    cleaned = re.sub(r',\s*([}\]])', r'\1', json_str)
+    cleaned = re.sub(r",\s*([}\]])", r"\1", json_str)
 
     # Remove any leading/trailing whitespace
     cleaned = cleaned.strip()
@@ -247,20 +249,20 @@ def extract_json_from_response(response: str) -> str:
         BadRequestError: If no JSON found in response
     """
     # Try markdown code block first
-    json_block_match = re.search(r'```json\s*([\s\S]*?)\s*```', response, re.IGNORECASE)
+    json_block_match = re.search(r"```json\s*([\s\S]*?)\s*```", response, re.IGNORECASE)
     if json_block_match:
         return json_block_match.group(1).strip()
 
     # Try generic code block
-    generic_block_match = re.search(r'```\s*([\s\S]*?)\s*```', response)
+    generic_block_match = re.search(r"```\s*([\s\S]*?)\s*```", response)
     if generic_block_match:
         content = generic_block_match.group(1).strip()
         # Verify it looks like JSON
-        if content.startswith('{') or content.startswith('['):
+        if content.startswith("{") or content.startswith("["):
             return content
 
     # Try to find JSON object directly
-    json_object_match = re.search(r'\{[\s\S]*\}', response)
+    json_object_match = re.search(r"\{[\s\S]*\}", response)
     if json_object_match:
         return json_object_match.group(0)
 

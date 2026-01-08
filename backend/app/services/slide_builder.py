@@ -3,15 +3,16 @@ Slide Builder service for creating PowerPoint files.
 
 This module provides functions to build .pptx files from slide data.
 """
+
 import io
 import logging
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from pptx import Presentation
-from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.util import Inches, Pt
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +118,10 @@ class SlideBuilder:
         # Add background color
         background = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            self.prs.slide_width, self.prs.slide_height
+            Inches(0),
+            Inches(0),
+            self.prs.slide_width,
+            self.prs.slide_height,
         )
         background.fill.solid()
         background.fill.fore_color.rgb = hex_to_rgb(self.style["colors"]["primary"])
@@ -132,8 +135,7 @@ class SlideBuilder:
 
         # Add title
         title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(2.5),
-            Inches(12.333), Inches(1.5)
+            Inches(0.5), Inches(2.5), Inches(12.333), Inches(1.5)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -147,8 +149,7 @@ class SlideBuilder:
         # Add subtitle if provided
         if subtitle:
             subtitle_box = slide.shapes.add_textbox(
-                Inches(0.5), Inches(4.2),
-                Inches(12.333), Inches(1)
+                Inches(0.5), Inches(4.2), Inches(12.333), Inches(1)
             )
             subtitle_frame = subtitle_box.text_frame
             subtitle_para = subtitle_frame.paragraphs[0]
@@ -180,9 +181,7 @@ class SlideBuilder:
 
         # Add accent bar
         accent_bar = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(3.2),
-            Inches(13.333), Inches(0.1)
+            MSO_SHAPE.RECTANGLE, Inches(0), Inches(3.2), Inches(13.333), Inches(0.1)
         )
         accent_bar.fill.solid()
         accent_bar.fill.fore_color.rgb = hex_to_rgb(self.style["colors"]["primary"])
@@ -190,8 +189,7 @@ class SlideBuilder:
 
         # Add title
         title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(2.5),
-            Inches(12.333), Inches(1.5)
+            Inches(0.5), Inches(2.5), Inches(12.333), Inches(1.5)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -227,9 +225,7 @@ class SlideBuilder:
 
         # Add title bar background
         title_bg = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            Inches(13.333), Inches(1.2)
+            MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(1.2)
         )
         title_bg.fill.solid()
         title_bg.fill.fore_color.rgb = hex_to_rgb(self.style["colors"]["primary"])
@@ -243,8 +239,7 @@ class SlideBuilder:
 
         # Add title
         title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(0.3),
-            Inches(12.333), Inches(0.8)
+            Inches(0.5), Inches(0.3), Inches(12.333), Inches(0.8)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -257,8 +252,7 @@ class SlideBuilder:
         # Add bullets
         if bullets:
             content_box = slide.shapes.add_textbox(
-                Inches(0.75), Inches(1.5),
-                Inches(11.833), Inches(5.5)
+                Inches(0.75), Inches(1.5), Inches(11.833), Inches(5.5)
             )
             content_frame = content_box.text_frame
             content_frame.word_wrap = True
@@ -282,8 +276,7 @@ class SlideBuilder:
                 details_top = Inches(5)
 
             details_box = slide.shapes.add_textbox(
-                Inches(0.75), details_top,
-                Inches(11.833), Inches(2)
+                Inches(0.75), details_top, Inches(11.833), Inches(2)
             )
             details_frame = details_box.text_frame
             details_frame.word_wrap = True

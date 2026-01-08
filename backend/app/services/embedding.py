@@ -6,8 +6,10 @@ Embedding dimension is configured via EMBEDDING_DIM environment variable.
 - embeddinggemma:300m outputs 768 dimensions
 - PLaMo-Embedding-1B outputs 2048 dimensions
 """
+
 import asyncio
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
 import httpx
 
 from app.core.config import settings

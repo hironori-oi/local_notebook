@@ -1,9 +1,11 @@
 """
 Tests for health check endpoints.
 """
+
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock
 
 
 class TestHealthCheck:
@@ -78,8 +80,9 @@ class TestFullHealthCheck:
 
     def test_full_health_check_all_healthy(self, client: TestClient):
         """Test full health check when all services are healthy."""
-        with patch("app.api.v1.health.get_llm_client") as mock_llm, \
-             patch("app.api.v1.health.get_embedding_client") as mock_embed:
+        with patch("app.api.v1.health.get_llm_client") as mock_llm, patch(
+            "app.api.v1.health.get_embedding_client"
+        ) as mock_embed:
             mock_llm_client = AsyncMock()
             mock_llm_client.health_check.return_value = {"status": "healthy"}
             mock_llm.return_value = mock_llm_client
@@ -97,8 +100,9 @@ class TestFullHealthCheck:
 
     def test_full_health_check_degraded(self, client: TestClient):
         """Test full health check when some services are unhealthy."""
-        with patch("app.api.v1.health.get_llm_client") as mock_llm, \
-             patch("app.api.v1.health.get_embedding_client") as mock_embed:
+        with patch("app.api.v1.health.get_llm_client") as mock_llm, patch(
+            "app.api.v1.health.get_embedding_client"
+        ) as mock_embed:
             mock_llm_client = AsyncMock()
             mock_llm_client.health_check.return_value = {"status": "unhealthy"}
             mock_llm.return_value = mock_llm_client

@@ -3,29 +3,25 @@ API endpoints for YouTube video transcription.
 """
 
 import logging
+import math
 from typing import Optional
 from uuid import UUID
-import math
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
-from app.core.config import settings
-from app.models.user import User
-from app.models.transcription import Transcription
-from app.schemas.transcription import (
-    TranscriptionCreate,
-    TranscriptionResponse,
-    TranscriptionListItem,
-    TranscriptionListResponse,
-)
-from app.services.youtube_transcriber import (
-    extract_video_id,
-    is_whisper_configured,
-)
 from app.celery_app.tasks.transcription import enqueue_transcription
+from app.core.config import settings
+from app.core.deps import get_current_user, get_db
+from app.models.transcription import Transcription
+from app.models.user import User
+from app.schemas.transcription import (TranscriptionCreate,
+                                       TranscriptionListItem,
+                                       TranscriptionListResponse,
+                                       TranscriptionResponse)
+from app.services.youtube_transcriber import (extract_video_id,
+                                              is_whisper_configured)
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +35,15 @@ async def get_transcription_config_status():
     """
     return {
         "configured": is_whisper_configured(),
-        "whisper_server_url": settings.WHISPER_SERVER_URL if is_whisper_configured() else None,
+        "whisper_server_url": (
+            settings.WHISPER_SERVER_URL if is_whisper_configured() else None
+        ),
     }
 
 
-@router.post("/", response_model=TranscriptionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=TranscriptionResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_transcription(
     req: TranscriptionCreate,
     db: Session = Depends(get_db),
@@ -75,11 +75,15 @@ async def create_transcription(
         )
 
     # Check for duplicate (same video_id for same user in pending/processing state)
-    existing = db.query(Transcription).filter(
-        Transcription.user_id == current_user.id,
-        Transcription.video_id == video_id,
-        Transcription.processing_status.in_(["pending", "processing"]),
-    ).first()
+    existing = (
+        db.query(Transcription)
+        .filter(
+            Transcription.user_id == current_user.id,
+            Transcription.video_id == video_id,
+            Transcription.processing_status.in_(["pending", "processing"]),
+        )
+        .first()
+    )
 
     if existing:
         raise HTTPException(
@@ -128,12 +132,15 @@ async def list_transcriptions(
         per_page = 20
 
     # Base query
-    query = db.query(Transcription).filter(
-        Transcription.user_id == current_user.id
-    )
+    query = db.query(Transcription).filter(Transcription.user_id == current_user.id)
 
     # Apply status filter
-    if status_filter and status_filter in ["pending", "processing", "completed", "failed"]:
+    if status_filter and status_filter in [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+    ]:
         query = query.filter(Transcription.processing_status == status_filter)
 
     # Get total count
@@ -141,8 +148,7 @@ async def list_transcriptions(
 
     # Get paginated results
     items = (
-        query
-        .order_by(Transcription.created_at.desc())
+        query.order_by(Transcription.created_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()
@@ -166,10 +172,14 @@ async def get_transcription(
     """
     Get a specific transcription by ID.
     """
-    transcription = db.query(Transcription).filter(
-        Transcription.id == transcription_id,
-        Transcription.user_id == current_user.id,
-    ).first()
+    transcription = (
+        db.query(Transcription)
+        .filter(
+            Transcription.id == transcription_id,
+            Transcription.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if not transcription:
         raise HTTPException(
@@ -192,10 +202,14 @@ async def delete_transcription(
     Note: If the transcription is currently processing, the background
     task will continue but the result will not be saved.
     """
-    transcription = db.query(Transcription).filter(
-        Transcription.id == transcription_id,
-        Transcription.user_id == current_user.id,
-    ).first()
+    transcription = (
+        db.query(Transcription)
+        .filter(
+            Transcription.id == transcription_id,
+            Transcription.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if not transcription:
         raise HTTPException(
@@ -227,10 +241,14 @@ async def retry_transcription(
             detail="文字起こしサーバーが設定されていません。管理者に連絡してください。",
         )
 
-    transcription = db.query(Transcription).filter(
-        Transcription.id == transcription_id,
-        Transcription.user_id == current_user.id,
-    ).first()
+    transcription = (
+        db.query(Transcription)
+        .filter(
+            Transcription.id == transcription_id,
+            Transcription.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if not transcription:
         raise HTTPException(

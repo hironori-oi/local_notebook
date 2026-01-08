@@ -4,22 +4,22 @@ Email Generator service for generating email content from documents and meeting 
 This module handles the generation of email body text that summarizes documents
 and extracts speaker opinions from meeting minutes using RAG context and LLM.
 """
+
 import logging
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from uuid import UUID
-from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.schemas.email import EmailContent, EmailGenerateResponse, SpeakerOpinion
-from app.services.context_retriever import (
-    retrieve_summaries_for_email,
-    format_summaries_for_prompt,
-)
-from app.services.llm_client import call_generation_llm
-from app.services.json_parser import parse_llm_json
 from app.core.exceptions import BadRequestError, LLMConnectionError
 from app.models.llm_settings import LLMSettings
+from app.schemas.email import (EmailContent, EmailGenerateResponse,
+                               SpeakerOpinion)
+from app.services.context_retriever import (format_summaries_for_prompt,
+                                            retrieve_summaries_for_email)
+from app.services.json_parser import parse_llm_json
+from app.services.llm_client import call_generation_llm
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,9 @@ def get_email_prompts(db: Session) -> Tuple[Optional[str], Optional[str]]:
         Tuple of (system_prompt, user_template), both can be None if using defaults
     """
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -230,7 +232,9 @@ async def generate_email_content(
         )
 
     # 2. Format summaries for prompt
-    document_context_text, minutes_context_text = format_summaries_for_prompt(summary_result)
+    document_context_text, minutes_context_text = format_summaries_for_prompt(
+        summary_result
+    )
     logger.info(
         f"Context lengths: documents={len(document_context_text)} chars, "
         f"minutes={len(minutes_context_text)} chars"
@@ -287,17 +291,25 @@ async def generate_email_content(
             # Create fallback content
             fallback_summary = "提供された資料・議事録の内容をご確認ください。"
             if document_context_text:
-                fallback_summary = document_context_text[:500] + "..." if len(document_context_text) > 500 else document_context_text
+                fallback_summary = (
+                    document_context_text[:500] + "..."
+                    if len(document_context_text) > 500
+                    else document_context_text
+                )
 
             content = EmailContent(
                 document_summary=fallback_summary,
-                speaker_opinions=[
-                    SpeakerOpinion(
-                        speaker="参加者",
-                        opinions=["詳細は添付の資料・議事録をご確認ください。"]
-                    )
-                ] if minutes_context_text else [],
-                additional_notes="※AIによる要約生成に問題が発生したため、原文の一部を表示しています。"
+                speaker_opinions=(
+                    [
+                        SpeakerOpinion(
+                            speaker="参加者",
+                            opinions=["詳細は添付の資料・議事録をご確認ください。"],
+                        )
+                    ]
+                    if minutes_context_text
+                    else []
+                ),
+                additional_notes="※AIによる要約生成に問題が発生したため、原文の一部を表示しています。",
             )
 
     # 6. Format email body
@@ -307,7 +319,9 @@ async def generate_email_content(
     # 7. Build response
     sources_used = len(document_source_ids) + len(minute_ids)
 
-    logger.info(f"Successfully generated email with {len(content.speaker_opinions)} speakers")
+    logger.info(
+        f"Successfully generated email with {len(content.speaker_opinions)} speakers"
+    )
 
     return EmailGenerateResponse(
         topic=topic,

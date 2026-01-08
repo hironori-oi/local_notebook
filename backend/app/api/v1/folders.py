@@ -1,30 +1,31 @@
 """Folder API endpoints for managing source folders."""
+
 import logging
 from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access, parse_uuid
-from app.models.source_folder import SourceFolder
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.source import Source
+from app.models.source_folder import SourceFolder
 from app.models.user import User
-from app.schemas.source_folder import (
-    FolderCreate,
-    FolderUpdate,
-    FolderOut,
-    FolderReorder,
-)
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.schemas.source_folder import (FolderCreate, FolderOut, FolderReorder,
+                                       FolderUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/folders", tags=["folders"])
 
 
-def _get_folder_with_access_check(db: Session, folder_id: UUID, user: User) -> SourceFolder:
+def _get_folder_with_access_check(
+    db: Session, folder_id: UUID, user: User
+) -> SourceFolder:
     """Get a folder and verify the user can access the parent notebook."""
     folder = db.query(SourceFolder).filter(SourceFolder.id == folder_id).first()
 
@@ -65,21 +66,26 @@ def list_folders(
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
     check_notebook_access(db, nb_uuid, current_user)
 
-    folders = db.query(SourceFolder).filter(
-        SourceFolder.notebook_id == nb_uuid,
-    ).order_by(SourceFolder.position).all()
+    folders = (
+        db.query(SourceFolder)
+        .filter(
+            SourceFolder.notebook_id == nb_uuid,
+        )
+        .order_by(SourceFolder.position)
+        .all()
+    )
 
     if not folders:
         return []
 
     # Batch fetch source counts to avoid N+1 queries
     folder_ids = [f.id for f in folders]
-    source_counts = db.query(
-        Source.folder_id,
-        func.count(Source.id).label("count")
-    ).filter(
-        Source.folder_id.in_(folder_ids)
-    ).group_by(Source.folder_id).all()
+    source_counts = (
+        db.query(Source.folder_id, func.count(Source.id).label("count"))
+        .filter(Source.folder_id.in_(folder_ids))
+        .group_by(Source.folder_id)
+        .all()
+    )
 
     count_map = {row.folder_id: row.count for row in source_counts}
 
@@ -90,7 +96,11 @@ def list_folders(
     return result
 
 
-@router.post("/notebook/{notebook_id}", response_model=FolderOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/notebook/{notebook_id}",
+    response_model=FolderOut,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_folder(
     notebook_id: str,
     data: FolderCreate,
@@ -106,9 +116,12 @@ def create_folder(
     check_notebook_access(db, nb_uuid, current_user)
 
     # Get max position for new folder
-    max_position = db.query(func.max(SourceFolder.position)).filter(
-        SourceFolder.notebook_id == nb_uuid
-    ).scalar() or -1
+    max_position = (
+        db.query(func.max(SourceFolder.position))
+        .filter(SourceFolder.notebook_id == nb_uuid)
+        .scalar()
+        or -1
+    )
 
     folder = SourceFolder(
         notebook_id=nb_uuid,
@@ -223,7 +236,9 @@ def delete_folder(
         user_agent=user_agent,
     )
 
-    logger.info(f"Folder deleted: {folder_name} ({source_count} sources) by user {current_user.id}")
+    logger.info(
+        f"Folder deleted: {folder_name} ({source_count} sources) by user {current_user.id}"
+    )
 
     return None
 
@@ -244,9 +259,9 @@ def reorder_folders(
     check_notebook_access(db, nb_uuid, current_user)
 
     # Verify all folder IDs belong to this notebook
-    existing_folders = db.query(SourceFolder).filter(
-        SourceFolder.notebook_id == nb_uuid
-    ).all()
+    existing_folders = (
+        db.query(SourceFolder).filter(SourceFolder.notebook_id == nb_uuid).all()
+    )
     existing_ids = {f.id for f in existing_folders}
     provided_ids = set(data.folder_ids)
 
@@ -265,21 +280,26 @@ def reorder_folders(
     db.commit()
 
     # Return updated folders
-    folders = db.query(SourceFolder).filter(
-        SourceFolder.notebook_id == nb_uuid,
-    ).order_by(SourceFolder.position).all()
+    folders = (
+        db.query(SourceFolder)
+        .filter(
+            SourceFolder.notebook_id == nb_uuid,
+        )
+        .order_by(SourceFolder.position)
+        .all()
+    )
 
     if not folders:
         return []
 
     # Batch fetch source counts to avoid N+1 queries
     folder_ids = [f.id for f in folders]
-    source_counts = db.query(
-        Source.folder_id,
-        func.count(Source.id).label("count")
-    ).filter(
-        Source.folder_id.in_(folder_ids)
-    ).group_by(Source.folder_id).all()
+    source_counts = (
+        db.query(Source.folder_id, func.count(Source.id).label("count"))
+        .filter(Source.folder_id.in_(folder_ids))
+        .group_by(Source.folder_id)
+        .all()
+    )
 
     count_map = {row.folder_id: row.count for row in source_counts}
 

@@ -1,13 +1,13 @@
 """
 Admin schemas for user management.
 """
+
 import re
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
-
 
 # Password complexity requirements (same as auth.py)
 PASSWORD_MIN_LENGTH = 8
@@ -16,6 +16,7 @@ PASSWORD_MAX_LENGTH = 128
 
 class UserListItem(BaseModel):
     """User list item for admin view."""
+
     id: UUID
     username: str
     display_name: str
@@ -28,6 +29,7 @@ class UserListItem(BaseModel):
 
 class UserDetail(BaseModel):
     """User detail for admin view."""
+
     id: UUID
     username: str
     display_name: str
@@ -40,8 +42,11 @@ class UserDetail(BaseModel):
 
 class AdminUserCreate(BaseModel):
     """Schema for admin to create a new user."""
+
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
-    password: str = Field(..., min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+    password: str = Field(
+        ..., min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH
+    )
     display_name: str = Field(..., min_length=1, max_length=100)
     role: str = Field(default="user", pattern=r"^(admin|user)$")
 
@@ -52,7 +57,9 @@ class AdminUserCreate(BaseModel):
         Validate password meets complexity requirements.
         """
         if len(v) < PASSWORD_MIN_LENGTH:
-            raise ValueError(f"パスワードは{PASSWORD_MIN_LENGTH}文字以上である必要があります")
+            raise ValueError(
+                f"パスワードは{PASSWORD_MIN_LENGTH}文字以上である必要があります"
+            )
 
         if not re.search(r"[a-z]", v):
             raise ValueError("パスワードには小文字を含める必要があります")
@@ -73,7 +80,9 @@ class AdminUserCreate(BaseModel):
     def validate_username(cls, v: str) -> str:
         """Validate username format."""
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
-            raise ValueError("ユーザー名には英数字、アンダースコア、ハイフンのみ使用できます")
+            raise ValueError(
+                "ユーザー名には英数字、アンダースコア、ハイフンのみ使用できます"
+            )
         return v
 
     @field_validator("role")
@@ -87,9 +96,12 @@ class AdminUserCreate(BaseModel):
 
 class AdminUserUpdate(BaseModel):
     """Schema for admin to update a user."""
+
     display_name: Optional[str] = Field(None, min_length=1, max_length=100)
     role: Optional[str] = Field(None, pattern=r"^(admin|user)$")
-    password: Optional[str] = Field(None, min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+    password: Optional[str] = Field(
+        None, min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH
+    )
 
     @field_validator("password")
     @classmethod
@@ -99,7 +111,9 @@ class AdminUserUpdate(BaseModel):
             return v
 
         if len(v) < PASSWORD_MIN_LENGTH:
-            raise ValueError(f"パスワードは{PASSWORD_MIN_LENGTH}文字以上である必要があります")
+            raise ValueError(
+                f"パスワードは{PASSWORD_MIN_LENGTH}文字以上である必要があります"
+            )
 
         if not re.search(r"[a-z]", v):
             raise ValueError("パスワードには小文字を含める必要があります")
@@ -126,5 +140,6 @@ class AdminUserUpdate(BaseModel):
 
 class UserListResponse(BaseModel):
     """Response for user list endpoint."""
+
     users: List[UserListItem]
     total: int

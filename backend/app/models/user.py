@@ -1,8 +1,9 @@
 import uuid
-from sqlalchemy import Column, String, DateTime
+
+from sqlalchemy import Column, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -24,7 +25,5 @@ class User(Base):
 
     # Relationships
     chat_sessions = relationship(
-        "ChatSession",
-        back_populates="user",
-        cascade="all, delete-orphan"
+        "ChatSession", back_populates="user", cascade="all, delete-orphan"
     )

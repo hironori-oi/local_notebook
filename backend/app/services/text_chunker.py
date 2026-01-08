@@ -6,13 +6,15 @@ This module provides intelligent text chunking that:
 - Maintains overlap between chunks for better retrieval
 - Handles Japanese and English text appropriately
 """
-from typing import List, Tuple
+
 from dataclasses import dataclass
+from typing import List, Tuple
 
 
 @dataclass
 class ChunkResult:
     """Result of chunking a page of text."""
+
     content: str
     page_number: int
     chunk_index: int
@@ -113,7 +115,9 @@ def chunk_text_with_overlap(
             start = split_pos
 
         # Safety check to prevent infinite loop
-        if start >= len(text) or (len(chunks) > 0 and start <= (split_pos - chunk_size)):
+        if start >= len(text) or (
+            len(chunks) > 0 and start <= (split_pos - chunk_size)
+        ):
             break
 
     return chunks
@@ -158,11 +162,13 @@ def chunk_pages_with_overlap(
 
         for chunk_content in page_chunks:
             if chunk_content.strip():
-                results.append(ChunkResult(
-                    content=chunk_content,
-                    page_number=page_number,
-                    chunk_index=chunk_index,
-                ))
+                results.append(
+                    ChunkResult(
+                        content=chunk_content,
+                        page_number=page_number,
+                        chunk_index=chunk_index,
+                    )
+                )
                 chunk_index += 1
 
     return results

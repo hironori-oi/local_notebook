@@ -5,15 +5,15 @@ This module provides tasks for:
 - Processing chat messages with RAG retrieval and LLM response
 """
 
-import logging
 import asyncio
-from typing import Optional, List
+import logging
+from typing import List, Optional
 from uuid import UUID
 
 from celery import shared_task
 
-from app.celery_app.tasks.base import DatabaseTask
 from app.celery_app.config import RETRYABLE_EXCEPTIONS
+from app.celery_app.tasks.base import DatabaseTask
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,8 @@ def process_chat_message_task(
         use_rag: Whether to use RAG retrieval
         use_formatted_text: Whether to use formatted source text
     """
-    from app.services.chat_processor import process_chat_message_async
     from app.core.config import settings
+    from app.services.chat_processor import process_chat_message_async
 
     logger.info(f"Processing chat message: {message_id}")
     db = self.db
@@ -88,9 +88,9 @@ def _mark_message_failed(db, message_id: str, error_message: str):
     from app.models.chat import ChatMessage
 
     try:
-        message = db.query(ChatMessage).filter(
-            ChatMessage.id == UUID(message_id)
-        ).first()
+        message = (
+            db.query(ChatMessage).filter(ChatMessage.id == UUID(message_id)).first()
+        )
         if message:
             message.status = "failed"
             message.error_message = error_message

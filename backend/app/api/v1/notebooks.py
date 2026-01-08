@@ -2,15 +2,18 @@ from typing import List, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import or_, func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access
+from app.core.deps import check_notebook_access, get_current_user, get_db
 from app.models.notebook import Notebook
 from app.models.source import Source
 from app.models.user import User
-from app.schemas.notebook import NotebookCreate, NotebookUpdate, NotebookOut, NotebookListOut, NotebookListResponse
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.schemas.notebook import (NotebookCreate, NotebookListOut,
+                                  NotebookListResponse, NotebookOut,
+                                  NotebookUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
@@ -18,7 +21,8 @@ router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 @router.get("", response_model=NotebookListResponse)
 def list_notebooks(
     filter_type: Literal["all", "mine", "public"] = Query(
-        "all", description="Filter type: all (mine + public), mine (only mine), public (only public)"
+        "all",
+        description="Filter type: all (mine + public), mine (only mine), public (only public)",
     ),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(50, ge=1, le=100, description="Maximum items to return"),
@@ -66,10 +70,7 @@ def list_notebooks(
     else:  # "all"
         # User's own notebooks + public notebooks
         query = query.filter(
-            or_(
-                Notebook.owner_id == current_user.id,
-                Notebook.is_public == True
-            )
+            or_(Notebook.owner_id == current_user.id, Notebook.is_public == True)
         )
 
     # Get total count before pagination
@@ -81,10 +82,7 @@ def list_notebooks(
         count_query = count_query.filter(Notebook.is_public == True)
     else:
         count_query = count_query.filter(
-            or_(
-                Notebook.owner_id == current_user.id,
-                Notebook.is_public == True
-            )
+            or_(Notebook.owner_id == current_user.id, Notebook.is_public == True)
         )
     total = count_query.count()
 
@@ -96,17 +94,19 @@ def list_notebooks(
     # Convert to NotebookListOut format
     notebooks = []
     for row in results:
-        notebooks.append(NotebookListOut(
-            id=row.id,
-            title=row.title,
-            description=row.description,
-            is_public=row.is_public,
-            owner_id=row.owner_id,
-            owner_display_name=row.owner_display_name,
-            source_count=row.source_count,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        ))
+        notebooks.append(
+            NotebookListOut(
+                id=row.id,
+                title=row.title,
+                description=row.description,
+                is_public=row.is_public,
+                owner_id=row.owner_id,
+                owner_display_name=row.owner_display_name,
+                source_count=row.source_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+        )
 
     return NotebookListResponse(
         items=notebooks,
@@ -202,7 +202,9 @@ def update_notebook(
 
     # If changing is_public, require owner
     require_owner = data.is_public is not None
-    notebook = check_notebook_access(db, nb_uuid, current_user, require_owner=require_owner)
+    notebook = check_notebook_access(
+        db, nb_uuid, current_user, require_owner=require_owner
+    )
 
     update_details = {}
 

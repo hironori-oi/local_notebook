@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_current_user, get_db
 from app.models.user import User
 from app.services.search_service import SearchService
 
@@ -18,6 +18,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 class SearchResultItem(BaseModel):
     """Search result item schema."""
+
     type: Literal["notebook", "source", "minute", "message"]
     id: str
     title: str
@@ -33,6 +34,7 @@ class SearchResultItem(BaseModel):
 
 class SearchResponse(BaseModel):
     """Search response with results and metadata."""
+
     query: str
     results: list[SearchResultItem]
     total: int

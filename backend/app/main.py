@@ -2,22 +2,21 @@ import logging
 import os
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1 import (admin, assets, auth, chat, council_agendas,
+                        council_chat, council_infographics, council_meetings,
+                        council_notes, council_search, councils,
+                        document_checker, email, export, folders, health,
+                        infographic, llm_settings, minutes, notebooks, notes,
+                        processing, search, slide_generator, sources,
+                        transcription)
 from app.core.config import settings
-from app.core.exceptions import (
-    AppException,
-    app_exception_handler,
-    validation_exception_handler,
-    generic_exception_handler,
-)
+from app.core.exceptions import (AppException, app_exception_handler,
+                                 generic_exception_handler,
+                                 validation_exception_handler)
 from app.core.rate_limiter import RateLimitMiddleware
-from app.api.v1 import auth, health, notebooks, sources, folders, chat, notes, infographic, assets, email, minutes, llm_settings, processing, export, search, admin
-from app.api.v1 import councils, council_meetings, council_agendas, council_notes, council_chat, council_search, council_infographics
-from app.api.v1 import transcription
-from app.api.v1 import document_checker
-from app.api.v1 import slide_generator
 
 # Configure logging
 log_level = logging.DEBUG if settings.ENV == "development" else logging.INFO

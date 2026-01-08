@@ -1,8 +1,10 @@
 """
 Tests for chat endpoints.
 """
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
 from app.models.notebook import Notebook
@@ -12,9 +14,7 @@ from app.models.source import Source
 class TestChatQuery:
     """Tests for chat query endpoint."""
 
-    def test_chat_unauthenticated(
-        self, client: TestClient, test_notebook: Notebook
-    ):
+    def test_chat_unauthenticated(self, client: TestClient, test_notebook: Notebook):
         """Test that unauthenticated users cannot use chat."""
         response = client.post(
             f"/api/v1/notebooks/{test_notebook.id}/chat",

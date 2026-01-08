@@ -6,6 +6,7 @@ sets up task autodiscovery, and provides startup recovery hooks.
 """
 
 import logging
+
 from celery import Celery
 from celery.signals import worker_ready
 

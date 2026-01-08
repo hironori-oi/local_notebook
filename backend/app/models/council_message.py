@@ -1,9 +1,11 @@
 """CouncilMessage model for storing council chat messages."""
+
 import uuid
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSON
-from sqlalchemy.sql import func
+
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -15,6 +17,7 @@ class CouncilMessage(Base):
     Messages belong to a CouncilChatSession and store the conversation
     history along with source references from RAG retrieval.
     """
+
     __tablename__ = "council_messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

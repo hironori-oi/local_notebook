@@ -1,8 +1,10 @@
 """
 Audit Log model for tracking user actions.
 """
+
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey
+
+from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
@@ -14,7 +16,9 @@ class AuditLog(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    action = Column(String, nullable=False)  # e.g., "login", "create_notebook", "upload_source"
+    action = Column(
+        String, nullable=False
+    )  # e.g., "login", "create_notebook", "upload_source"
     target_type = Column(String, nullable=True)  # e.g., "notebook", "source", "note"
     target_id = Column(String, nullable=True)  # ID of the affected resource
     details = Column(String, nullable=True)  # JSON-encoded additional details

@@ -3,10 +3,11 @@ Audit logging service.
 
 This module provides functions to log user actions for compliance and security monitoring.
 """
+
+import json
 import logging
 from typing import Optional
 from uuid import UUID
-import json
 
 from fastapi import Request
 from sqlalchemy.orm import Session

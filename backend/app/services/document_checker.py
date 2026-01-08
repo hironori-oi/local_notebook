@@ -10,9 +10,10 @@ This module provides functions to check documents for:
 - Honorific usage (敬語・丁寧語)
 - Readability (読みやすさ)
 """
-import logging
+
 import json
-from typing import List, Dict, Optional, Any, Tuple
+import logging
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -20,8 +21,8 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.document_check import DocumentCheck, DocumentCheckIssue
 from app.models.llm_settings import LLMSettings
-from app.services.llm_client import call_generation_llm
 from app.services.json_parser import extract_json_from_response
+from app.services.llm_client import call_generation_llm
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,9 @@ DOCUMENT_CHECK_USER_TEMPLATE = """以下のテキストをチェックしてく�
 MAX_CHECK_TEXT_LENGTH = 8000
 
 
-def get_document_check_prompts(db: Optional[Session]) -> Tuple[Optional[str], Optional[str]]:
+def get_document_check_prompts(
+    db: Optional[Session],
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Get custom document check prompts from LLM settings.
 
@@ -139,7 +142,9 @@ def get_document_check_prompts(db: Optional[Session]) -> Tuple[Optional[str], Op
         return None, None
 
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -179,7 +184,9 @@ def _build_check_instructions(enabled_check_types: List[str]) -> str:
     for check_type in enabled_check_types:
         if check_type in CHECK_TYPES:
             check_info = CHECK_TYPES[check_type]
-            instructions.append(f"・{check_info['name']}: {check_info['prompt_instruction']}")
+            instructions.append(
+                f"・{check_info['name']}: {check_info['prompt_instruction']}"
+            )
     return "\n".join(instructions)
 
 
@@ -219,8 +226,7 @@ async def check_document_text(
     # Add custom terminology if provided
     if custom_terminology and "terminology" in valid_check_types:
         terminology_list = ", ".join(
-            f"「{term}」→「{correct}」"
-            for term, correct in custom_terminology.items()
+            f"「{term}」→「{correct}」" for term, correct in custom_terminology.items()
         )
         check_instructions += f"\n・カスタム用語辞書: {terminology_list}"
 
@@ -228,7 +234,9 @@ async def check_document_text(
     custom_system, custom_user = get_document_check_prompts(db)
 
     # Build prompts
-    base_system_prompt = custom_system if custom_system else DOCUMENT_CHECK_SYSTEM_PROMPT
+    base_system_prompt = (
+        custom_system if custom_system else DOCUMENT_CHECK_SYSTEM_PROMPT
+    )
     system_prompt = base_system_prompt.format(check_instructions=check_instructions)
 
     # Truncate text if too long

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 @dataclass
 class SearchResult:
     """Search result item."""
+
     type: Literal["notebook", "source", "minute", "message"]
     id: str
     title: str
@@ -63,7 +64,7 @@ class SearchService:
         results.sort(key=lambda x: x.relevance_score, reverse=True)
 
         total = len(results)
-        paginated = results[offset:offset + limit]
+        paginated = results[offset : offset + limit]
 
         search_time_ms = (time.time() - start_time) * 1000
 
@@ -73,7 +74,8 @@ class SearchService:
         """Search notebooks by title and description."""
         pattern = f"%{query}%"
 
-        sql = text("""
+        sql = text(
+            """
             SELECT
                 id,
                 title,
@@ -89,28 +91,32 @@ class SearchService:
               AND (title ILIKE :pattern OR description ILIKE :pattern)
             ORDER BY relevance DESC, updated_at DESC
             LIMIT 20
-        """)
-
-        result = self.db.execute(
-            sql,
-            {"user_id": self.user_id, "pattern": pattern}
+        """
         )
+
+        result = self.db.execute(sql, {"user_id": self.user_id, "pattern": pattern})
 
         items = []
         for row in result:
             # Create snippet from title or description
-            snippet = row.description[:100] + "..." if row.description and len(row.description) > 100 else (row.description or "")
+            snippet = (
+                row.description[:100] + "..."
+                if row.description and len(row.description) > 100
+                else (row.description or "")
+            )
 
-            items.append(SearchResult(
-                type="notebook",
-                id=str(row.id),
-                title=row.title,
-                snippet=snippet,
-                notebook_id=None,
-                notebook_title=None,
-                relevance_score=float(row.relevance),
-                created_at=row.created_at,
-            ))
+            items.append(
+                SearchResult(
+                    type="notebook",
+                    id=str(row.id),
+                    title=row.title,
+                    snippet=snippet,
+                    notebook_id=None,
+                    notebook_title=None,
+                    relevance_score=float(row.relevance),
+                    created_at=row.created_at,
+                )
+            )
 
         return items
 
@@ -118,7 +124,8 @@ class SearchService:
         """Search sources by title and summary."""
         pattern = f"%{query}%"
 
-        sql = text("""
+        sql = text(
+            """
             SELECT
                 s.id,
                 s.title,
@@ -137,27 +144,31 @@ class SearchService:
               AND (s.title ILIKE :pattern OR s.summary ILIKE :pattern)
             ORDER BY relevance DESC, s.created_at DESC
             LIMIT 20
-        """)
-
-        result = self.db.execute(
-            sql,
-            {"user_id": self.user_id, "pattern": pattern}
+        """
         )
+
+        result = self.db.execute(sql, {"user_id": self.user_id, "pattern": pattern})
 
         items = []
         for row in result:
-            snippet = row.summary[:100] + "..." if row.summary and len(row.summary) > 100 else (row.summary or "")
+            snippet = (
+                row.summary[:100] + "..."
+                if row.summary and len(row.summary) > 100
+                else (row.summary or "")
+            )
 
-            items.append(SearchResult(
-                type="source",
-                id=str(row.id),
-                title=row.title,
-                snippet=snippet,
-                notebook_id=str(row.notebook_id),
-                notebook_title=row.notebook_title,
-                relevance_score=float(row.relevance),
-                created_at=row.created_at,
-            ))
+            items.append(
+                SearchResult(
+                    type="source",
+                    id=str(row.id),
+                    title=row.title,
+                    snippet=snippet,
+                    notebook_id=str(row.notebook_id),
+                    notebook_title=row.notebook_title,
+                    relevance_score=float(row.relevance),
+                    created_at=row.created_at,
+                )
+            )
 
         return items
 
@@ -165,7 +176,8 @@ class SearchService:
         """Search minutes by title, content, and summary."""
         pattern = f"%{query}%"
 
-        sql = text("""
+        sql = text(
+            """
             SELECT
                 m.id,
                 m.title,
@@ -186,29 +198,31 @@ class SearchService:
               AND (m.title ILIKE :pattern OR m.content ILIKE :pattern OR m.summary ILIKE :pattern)
             ORDER BY relevance DESC, m.created_at DESC
             LIMIT 20
-        """)
-
-        result = self.db.execute(
-            sql,
-            {"user_id": self.user_id, "pattern": pattern}
+        """
         )
+
+        result = self.db.execute(sql, {"user_id": self.user_id, "pattern": pattern})
 
         items = []
         for row in result:
             # Prefer summary for snippet, fallback to content
             text_source = row.summary or row.content or ""
-            snippet = text_source[:100] + "..." if len(text_source) > 100 else text_source
+            snippet = (
+                text_source[:100] + "..." if len(text_source) > 100 else text_source
+            )
 
-            items.append(SearchResult(
-                type="minute",
-                id=str(row.id),
-                title=row.title,
-                snippet=snippet,
-                notebook_id=str(row.notebook_id),
-                notebook_title=row.notebook_title,
-                relevance_score=float(row.relevance),
-                created_at=row.created_at,
-            ))
+            items.append(
+                SearchResult(
+                    type="minute",
+                    id=str(row.id),
+                    title=row.title,
+                    snippet=snippet,
+                    notebook_id=str(row.notebook_id),
+                    notebook_title=row.notebook_title,
+                    relevance_score=float(row.relevance),
+                    created_at=row.created_at,
+                )
+            )
 
         return items
 
@@ -216,7 +230,8 @@ class SearchService:
         """Search messages by content."""
         pattern = f"%{query}%"
 
-        sql = text("""
+        sql = text(
+            """
             SELECT
                 m.id,
                 m.content,
@@ -234,12 +249,10 @@ class SearchService:
               AND m.content ILIKE :pattern
             ORDER BY m.created_at DESC
             LIMIT 20
-        """)
-
-        result = self.db.execute(
-            sql,
-            {"user_id": self.user_id, "pattern": pattern}
+        """
         )
+
+        result = self.db.execute(sql, {"user_id": self.user_id, "pattern": pattern})
 
         items = []
         for row in result:
@@ -252,16 +265,18 @@ class SearchService:
             session_name = row.session_title or "チャット"
             title = f"[{role_label}] {session_name}"
 
-            items.append(SearchResult(
-                type="message",
-                id=str(row.id),
-                title=title,
-                snippet=snippet,
-                notebook_id=str(row.notebook_id),
-                notebook_title=row.notebook_title,
-                relevance_score=float(row.relevance),
-                created_at=row.created_at,
-            ))
+            items.append(
+                SearchResult(
+                    type="message",
+                    id=str(row.id),
+                    title=title,
+                    snippet=snippet,
+                    notebook_id=str(row.notebook_id),
+                    notebook_title=row.notebook_title,
+                    relevance_score=float(row.relevance),
+                    created_at=row.created_at,
+                )
+            )
 
         return items
 
@@ -270,45 +285,61 @@ class SearchService:
         results: list[SearchResult] = []
 
         # Recent notebooks
-        sql = text("""
+        sql = text(
+            """
             SELECT id, title, description, created_at, updated_at
             FROM notebooks
             WHERE owner_id = :user_id
             ORDER BY updated_at DESC
             LIMIT :limit
-        """)
+        """
+        )
         for row in self.db.execute(sql, {"user_id": self.user_id, "limit": limit // 2}):
-            results.append(SearchResult(
-                type="notebook",
-                id=str(row.id),
-                title=row.title,
-                snippet=row.description[:80] + "..." if row.description and len(row.description) > 80 else (row.description or ""),
-                notebook_id=None,
-                notebook_title=None,
-                relevance_score=1.0,
-                created_at=row.updated_at or row.created_at,
-            ))
+            results.append(
+                SearchResult(
+                    type="notebook",
+                    id=str(row.id),
+                    title=row.title,
+                    snippet=(
+                        row.description[:80] + "..."
+                        if row.description and len(row.description) > 80
+                        else (row.description or "")
+                    ),
+                    notebook_id=None,
+                    notebook_title=None,
+                    relevance_score=1.0,
+                    created_at=row.updated_at or row.created_at,
+                )
+            )
 
         # Recent sources
-        sql = text("""
+        sql = text(
+            """
             SELECT s.id, s.title, s.summary, s.notebook_id, n.title as notebook_title, s.created_at
             FROM sources s
             JOIN notebooks n ON s.notebook_id = n.id
             WHERE n.owner_id = :user_id
             ORDER BY s.created_at DESC
             LIMIT :limit
-        """)
+        """
+        )
         for row in self.db.execute(sql, {"user_id": self.user_id, "limit": limit // 2}):
-            results.append(SearchResult(
-                type="source",
-                id=str(row.id),
-                title=row.title,
-                snippet=row.summary[:80] + "..." if row.summary and len(row.summary) > 80 else (row.summary or ""),
-                notebook_id=str(row.notebook_id),
-                notebook_title=row.notebook_title,
-                relevance_score=1.0,
-                created_at=row.created_at,
-            ))
+            results.append(
+                SearchResult(
+                    type="source",
+                    id=str(row.id),
+                    title=row.title,
+                    snippet=(
+                        row.summary[:80] + "..."
+                        if row.summary and len(row.summary) > 80
+                        else (row.summary or "")
+                    ),
+                    notebook_id=str(row.notebook_id),
+                    notebook_title=row.notebook_title,
+                    relevance_score=1.0,
+                    created_at=row.created_at,
+                )
+            )
 
         # Sort by created_at and limit
         results.sort(key=lambda x: x.created_at or datetime.min, reverse=True)

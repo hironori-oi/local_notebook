@@ -4,11 +4,13 @@ LLM Client - Abstraction layer for LLM providers (Ollama, vLLM, etc.)
 Supports Ollama native API (/api/chat) and OpenAI-compatible API (/v1/chat/completions).
 The provider can be switched via LLM_PROVIDER environment variable or user-specific DB settings.
 """
-import logging
-from typing import List, Dict, Optional, AsyncGenerator, TYPE_CHECKING
-from uuid import UUID
-import httpx
+
 import json
+import logging
+from typing import TYPE_CHECKING, AsyncGenerator, Dict, List, Optional
+from uuid import UUID
+
+import httpx
 
 from app.core.config import settings
 
@@ -110,7 +112,9 @@ class LLMClient:
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
         except Exception as e:
-            error_msg = f"LLM request failed: {type(e).__name__}: {str(e) or 'No details'}"
+            error_msg = (
+                f"LLM request failed: {type(e).__name__}: {str(e) or 'No details'}"
+            )
             logger.error(error_msg)
             raise
 
@@ -319,6 +323,7 @@ def get_user_llm_settings(db: "Session", user_id: UUID) -> Optional["LLMSettings
         LLMSettings model or None if not found
     """
     import time
+
     from app.models.llm_settings import LLMSettings
 
     # Check cache
@@ -380,7 +385,11 @@ def create_llm_client_for_user(
             api_base=user_settings.api_base_url,
             model=model,
             provider=user_settings.provider,
-            timeout=300.0 if feature in ["format", "summary", "email", "infographic"] else 120.0,
+            timeout=(
+                300.0
+                if feature in ["format", "summary", "email", "infographic"]
+                else 120.0
+            ),
             max_tokens=max_tokens,
         )
     else:
@@ -415,7 +424,11 @@ async def call_llm_with_user_settings(
 
     if user_settings:
         client = create_llm_client_for_user(db, user_id, feature)
-        temp = temperature if temperature is not None else user_settings.get_temperature_for_feature(feature)
+        temp = (
+            temperature
+            if temperature is not None
+            else user_settings.get_temperature_for_feature(feature)
+        )
         return await client.chat(messages, temperature=temp)
     else:
         # Fall back to default behavior

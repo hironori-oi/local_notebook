@@ -1,6 +1,7 @@
 """
 Tests for notebook endpoints.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -167,9 +168,7 @@ class TestDeleteNotebook:
         self, authenticated_client: TestClient, test_notebook: Notebook
     ):
         """Test successful notebook deletion."""
-        response = authenticated_client.delete(
-            f"/api/v1/notebooks/{test_notebook.id}"
-        )
+        response = authenticated_client.delete(f"/api/v1/notebooks/{test_notebook.id}")
         assert response.status_code == 200
 
         # Verify it's deleted

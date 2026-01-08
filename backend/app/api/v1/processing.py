@@ -1,24 +1,23 @@
 """
 Processing Status API - Monitor background processing of sources and minutes
 """
+
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import or_, and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
-from app.models.user import User
-from app.models.source import Source
+from app.celery_app.tasks.content import (enqueue_minute_processing,
+                                          enqueue_source_processing)
+from app.core.deps import get_current_user, get_db
 from app.models.minute import Minute
 from app.models.notebook import Notebook
-from app.celery_app.tasks.content import (
-    enqueue_source_processing,
-    enqueue_minute_processing,
-)
+from app.models.source import Source
+from app.models.user import User
 
 router = APIRouter(prefix="/processing", tags=["processing"])
 
@@ -64,51 +63,91 @@ async def get_processing_stats(
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Source stats
-    source_pending = db.query(func.count(Source.id)).filter(
-        Source.notebook_id.in_(user_notebooks_select),
-        Source.processing_status == "pending"
-    ).scalar() or 0
+    source_pending = (
+        db.query(func.count(Source.id))
+        .filter(
+            Source.notebook_id.in_(user_notebooks_select),
+            Source.processing_status == "pending",
+        )
+        .scalar()
+        or 0
+    )
 
-    source_processing = db.query(func.count(Source.id)).filter(
-        Source.notebook_id.in_(user_notebooks_select),
-        Source.processing_status == "processing"
-    ).scalar() or 0
+    source_processing = (
+        db.query(func.count(Source.id))
+        .filter(
+            Source.notebook_id.in_(user_notebooks_select),
+            Source.processing_status == "processing",
+        )
+        .scalar()
+        or 0
+    )
 
     # Source model doesn't have updated_at, use created_at instead
-    source_completed_today = db.query(func.count(Source.id)).filter(
-        Source.notebook_id.in_(user_notebooks_select),
-        Source.processing_status == "completed",
-        Source.created_at >= today_start
-    ).scalar() or 0
+    source_completed_today = (
+        db.query(func.count(Source.id))
+        .filter(
+            Source.notebook_id.in_(user_notebooks_select),
+            Source.processing_status == "completed",
+            Source.created_at >= today_start,
+        )
+        .scalar()
+        or 0
+    )
 
-    source_failed_today = db.query(func.count(Source.id)).filter(
-        Source.notebook_id.in_(user_notebooks_select),
-        Source.processing_status == "failed",
-        Source.created_at >= today_start
-    ).scalar() or 0
+    source_failed_today = (
+        db.query(func.count(Source.id))
+        .filter(
+            Source.notebook_id.in_(user_notebooks_select),
+            Source.processing_status == "failed",
+            Source.created_at >= today_start,
+        )
+        .scalar()
+        or 0
+    )
 
     # Minute stats
-    minute_pending = db.query(func.count(Minute.id)).filter(
-        Minute.notebook_id.in_(user_notebooks_select),
-        Minute.processing_status == "pending"
-    ).scalar() or 0
+    minute_pending = (
+        db.query(func.count(Minute.id))
+        .filter(
+            Minute.notebook_id.in_(user_notebooks_select),
+            Minute.processing_status == "pending",
+        )
+        .scalar()
+        or 0
+    )
 
-    minute_processing = db.query(func.count(Minute.id)).filter(
-        Minute.notebook_id.in_(user_notebooks_select),
-        Minute.processing_status == "processing"
-    ).scalar() or 0
+    minute_processing = (
+        db.query(func.count(Minute.id))
+        .filter(
+            Minute.notebook_id.in_(user_notebooks_select),
+            Minute.processing_status == "processing",
+        )
+        .scalar()
+        or 0
+    )
 
-    minute_completed_today = db.query(func.count(Minute.id)).filter(
-        Minute.notebook_id.in_(user_notebooks_select),
-        Minute.processing_status == "completed",
-        Minute.updated_at >= today_start
-    ).scalar() or 0
+    minute_completed_today = (
+        db.query(func.count(Minute.id))
+        .filter(
+            Minute.notebook_id.in_(user_notebooks_select),
+            Minute.processing_status == "completed",
+            Minute.updated_at >= today_start,
+        )
+        .scalar()
+        or 0
+    )
 
-    minute_failed_today = db.query(func.count(Minute.id)).filter(
-        Minute.notebook_id.in_(user_notebooks_select),
-        Minute.processing_status == "failed",
-        Minute.updated_at >= today_start
-    ).scalar() or 0
+    minute_failed_today = (
+        db.query(func.count(Minute.id))
+        .filter(
+            Minute.notebook_id.in_(user_notebooks_select),
+            Minute.processing_status == "failed",
+            Minute.updated_at >= today_start,
+        )
+        .scalar()
+        or 0
+    )
 
     return ProcessingStats(
         pending=source_pending + minute_pending,
@@ -135,11 +174,7 @@ async def get_processing_dashboard(
     items: list[ProcessingItem] = []
 
     # Get user's notebooks with titles
-    user_notebooks = (
-        db.query(Notebook)
-        .filter(Notebook.owner_id == user_id)
-        .all()
-    )
+    user_notebooks = db.query(Notebook).filter(Notebook.owner_id == user_id).all()
     notebook_map = {str(nb.id): nb.title for nb in user_notebooks}
     notebook_ids = list(notebook_map.keys())
 
@@ -161,16 +196,18 @@ async def get_processing_dashboard(
     sources = source_query.order_by(Source.created_at.desc()).limit(limit).all()
 
     for source in sources:
-        items.append(ProcessingItem(
-            id=str(source.id),
-            type="source",
-            title=source.title,
-            notebook_id=str(source.notebook_id),
-            notebook_title=notebook_map.get(str(source.notebook_id), "Unknown"),
-            status=source.processing_status or "pending",
-            error=source.processing_error,
-            created_at=source.created_at,
-        ))
+        items.append(
+            ProcessingItem(
+                id=str(source.id),
+                type="source",
+                title=source.title,
+                notebook_id=str(source.notebook_id),
+                notebook_title=notebook_map.get(str(source.notebook_id), "Unknown"),
+                status=source.processing_status or "pending",
+                error=source.processing_error,
+                created_at=source.created_at,
+            )
+        )
 
     # Get minutes
     minute_query = db.query(Minute).filter(
@@ -182,16 +219,18 @@ async def get_processing_dashboard(
     minutes = minute_query.order_by(Minute.created_at.desc()).limit(limit).all()
 
     for minute in minutes:
-        items.append(ProcessingItem(
-            id=str(minute.id),
-            type="minute",
-            title=minute.title,
-            notebook_id=str(minute.notebook_id),
-            notebook_title=notebook_map.get(str(minute.notebook_id), "Unknown"),
-            status=minute.processing_status or "pending",
-            error=minute.processing_error,
-            created_at=minute.created_at,
-        ))
+        items.append(
+            ProcessingItem(
+                id=str(minute.id),
+                type="minute",
+                title=minute.title,
+                notebook_id=str(minute.notebook_id),
+                notebook_title=notebook_map.get(str(minute.notebook_id), "Unknown"),
+                status=minute.processing_status or "pending",
+                error=minute.processing_error,
+                created_at=minute.created_at,
+            )
+        )
 
     # Sort by created_at descending and limit
     items.sort(key=lambda x: x.created_at, reverse=True)
@@ -225,7 +264,7 @@ async def retry_processing(
         if source.processing_status not in ["failed", "pending"]:
             raise HTTPException(
                 status_code=400,
-                detail="失敗またはペンディング状態の項目のみリトライできます"
+                detail="失敗またはペンディング状態の項目のみリトライできます",
             )
 
         # Reset status and schedule reprocessing
@@ -252,7 +291,7 @@ async def retry_processing(
         if minute.processing_status not in ["failed", "pending"]:
             raise HTTPException(
                 status_code=400,
-                detail="失敗またはペンディング状態の項目のみリトライできます"
+                detail="失敗またはペンディング状態の項目のみリトライできます",
             )
 
         # Reset status and schedule reprocessing

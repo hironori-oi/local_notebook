@@ -3,6 +3,7 @@ Council chat API endpoints.
 
 Provides chat functionality with RAG support for council meetings.
 """
+
 from typing import List
 from uuid import UUID
 
@@ -10,22 +11,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_council_access, parse_uuid
+from app.core.deps import (check_council_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.council_chat_session import CouncilChatSession
 from app.models.council_message import CouncilMessage
 from app.models.user import User
-from app.schemas.council_chat import (
-    CouncilChatRequest,
-    CouncilChatResponse,
-    CouncilChatSessionCreate,
-    CouncilChatSessionUpdate,
-    CouncilChatSessionResponse,
-    CouncilChatSessionListResponse,
-    CouncilChatHistoryResponse,
-    CouncilMessageOut,
-)
+from app.schemas.council_chat import (CouncilChatHistoryResponse,
+                                      CouncilChatRequest, CouncilChatResponse,
+                                      CouncilChatSessionCreate,
+                                      CouncilChatSessionListResponse,
+                                      CouncilChatSessionResponse,
+                                      CouncilChatSessionUpdate,
+                                      CouncilMessageOut)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.council_rag import council_rag_answer
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
 
 router = APIRouter(prefix="/council-chat", tags=["council-chat"])
 
@@ -51,9 +51,11 @@ async def council_chat(
     # Get or create session
     if req.session_id:
         session_uuid = parse_uuid(req.session_id, "セッションID")
-        session = db.query(CouncilChatSession).filter(
-            CouncilChatSession.id == session_uuid
-        ).first()
+        session = (
+            db.query(CouncilChatSession)
+            .filter(CouncilChatSession.id == session_uuid)
+            .first()
+        )
 
         if not session:
             raise HTTPException(
@@ -72,7 +74,9 @@ async def council_chat(
             council_id=council_uuid,
             user_id=current_user.id,
             title=req.question[:50] + "..." if len(req.question) > 50 else req.question,
-            selected_meeting_ids=[str(mid) for mid in req.meeting_ids] if req.meeting_ids else None,
+            selected_meeting_ids=(
+                [str(mid) for mid in req.meeting_ids] if req.meeting_ids else None
+            ),
         )
         db.add(session)
         db.commit()
@@ -124,7 +128,7 @@ def list_council_chat_sessions(
     message_count_subq = (
         db.query(
             CouncilMessage.session_id,
-            func.count(CouncilMessage.id).label("message_count")
+            func.count(CouncilMessage.id).label("message_count"),
         )
         .group_by(CouncilMessage.session_id)
         .subquery()
@@ -140,7 +144,9 @@ def list_council_chat_sessions(
             CouncilChatSession.updated_at,
             func.coalesce(message_count_subq.c.message_count, 0).label("message_count"),
         )
-        .outerjoin(message_count_subq, CouncilChatSession.id == message_count_subq.c.session_id)
+        .outerjoin(
+            message_count_subq, CouncilChatSession.id == message_count_subq.c.session_id
+        )
         .filter(
             CouncilChatSession.council_id == council_uuid,
             CouncilChatSession.user_id == current_user.id,
@@ -152,15 +158,17 @@ def list_council_chat_sessions(
 
     sessions = []
     for row in results:
-        sessions.append(CouncilChatSessionResponse(
-            id=str(row.id),
-            council_id=str(row.council_id),
-            title=row.title,
-            selected_meeting_ids=row.selected_meeting_ids,
-            message_count=row.message_count,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        ))
+        sessions.append(
+            CouncilChatSessionResponse(
+                id=str(row.id),
+                council_id=str(row.council_id),
+                title=row.title,
+                selected_meeting_ids=row.selected_meeting_ids,
+                message_count=row.message_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+        )
 
     return CouncilChatSessionListResponse(
         sessions=sessions,
@@ -168,7 +176,11 @@ def list_council_chat_sessions(
     )
 
 
-@router.post("/sessions/{council_id}", response_model=CouncilChatSessionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/sessions/{council_id}",
+    response_model=CouncilChatSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_council_chat_session(
     council_id: str,
     data: CouncilChatSessionCreate,
@@ -185,7 +197,11 @@ def create_council_chat_session(
         council_id=council_uuid,
         user_id=current_user.id,
         title=data.title,
-        selected_meeting_ids=[str(mid) for mid in data.selected_meeting_ids] if data.selected_meeting_ids else None,
+        selected_meeting_ids=(
+            [str(mid) for mid in data.selected_meeting_ids]
+            if data.selected_meeting_ids
+            else None
+        ),
     )
     db.add(session)
     db.commit()
@@ -214,9 +230,11 @@ def update_council_chat_session(
     """
     session_uuid = parse_uuid(session_id, "セッションID")
 
-    session = db.query(CouncilChatSession).filter(
-        CouncilChatSession.id == session_uuid
-    ).first()
+    session = (
+        db.query(CouncilChatSession)
+        .filter(CouncilChatSession.id == session_uuid)
+        .first()
+    )
 
     if not session:
         raise HTTPException(
@@ -244,9 +262,11 @@ def update_council_chat_session(
     db.refresh(session)
 
     # Get message count
-    message_count = db.query(func.count(CouncilMessage.id)).filter(
-        CouncilMessage.session_id == session.id
-    ).scalar()
+    message_count = (
+        db.query(func.count(CouncilMessage.id))
+        .filter(CouncilMessage.session_id == session.id)
+        .scalar()
+    )
 
     return CouncilChatSessionResponse(
         id=str(session.id),
@@ -270,9 +290,11 @@ def delete_council_chat_session(
     """
     session_uuid = parse_uuid(session_id, "セッションID")
 
-    session = db.query(CouncilChatSession).filter(
-        CouncilChatSession.id == session_uuid
-    ).first()
+    session = (
+        db.query(CouncilChatSession)
+        .filter(CouncilChatSession.id == session_uuid)
+        .first()
+    )
 
     if not session:
         raise HTTPException(
@@ -307,9 +329,11 @@ def get_council_chat_history(
     """
     session_uuid = parse_uuid(session_id, "セッションID")
 
-    session = db.query(CouncilChatSession).filter(
-        CouncilChatSession.id == session_uuid
-    ).first()
+    session = (
+        db.query(CouncilChatSession)
+        .filter(CouncilChatSession.id == session_uuid)
+        .first()
+    )
 
     if not session:
         raise HTTPException(
@@ -321,9 +345,12 @@ def get_council_chat_history(
     check_council_access(db, session.council_id, current_user)
 
     # Get messages
-    messages = db.query(CouncilMessage).filter(
-        CouncilMessage.session_id == session_uuid
-    ).order_by(CouncilMessage.created_at.asc()).all()
+    messages = (
+        db.query(CouncilMessage)
+        .filter(CouncilMessage.session_id == session_uuid)
+        .order_by(CouncilMessage.created_at.asc())
+        .all()
+    )
 
     message_list = [
         CouncilMessageOut(

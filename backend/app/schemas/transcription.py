@@ -2,11 +2,12 @@
 Pydantic schemas for YouTube transcription feature.
 """
 
-from typing import Optional, List
-from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
-from datetime import datetime
 import re
+from datetime import datetime
+from typing import List, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class TranscriptionCreate(BaseModel):

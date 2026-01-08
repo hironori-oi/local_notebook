@@ -4,24 +4,23 @@ Council notes management API endpoints.
 Provides CRUD operations for council notes (メモ).
 Notes can be associated with a council (council-level) or a specific meeting (meeting-level).
 """
+
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_council_access, parse_uuid
+from app.core.deps import (check_council_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.council import Council
 from app.models.council_meeting import CouncilMeeting
 from app.models.council_note import CouncilNote
 from app.models.user import User
-from app.schemas.council_note import (
-    CouncilNoteCreate,
-    CouncilNoteUpdate,
-    CouncilNoteOut,
-    CouncilNoteListItem,
-)
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.schemas.council_note import (CouncilNoteCreate, CouncilNoteListItem,
+                                      CouncilNoteOut, CouncilNoteUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 router = APIRouter(prefix="/council-notes", tags=["council-notes"])
 
@@ -29,7 +28,10 @@ router = APIRouter(prefix="/council-notes", tags=["council-notes"])
 @router.get("/council/{council_id}", response_model=List[CouncilNoteListItem])
 def list_council_notes(
     council_id: str,
-    meeting_id: Optional[str] = Query(None, description="Filter by meeting ID. Use 'council' for council-level notes only."),
+    meeting_id: Optional[str] = Query(
+        None,
+        description="Filter by meeting ID. Use 'council' for council-level notes only.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -66,7 +68,11 @@ def list_council_notes(
         # Get meeting number if applicable
         meeting_number = None
         if note.meeting_id:
-            meeting = db.query(CouncilMeeting).filter(CouncilMeeting.id == note.meeting_id).first()
+            meeting = (
+                db.query(CouncilMeeting)
+                .filter(CouncilMeeting.id == note.meeting_id)
+                .first()
+            )
             if meeting:
                 meeting_number = meeting.meeting_number
 
@@ -74,20 +80,24 @@ def list_council_notes(
         user = db.query(User).filter(User.id == note.user_id).first()
 
         # Create content preview
-        content_preview = note.content[:100] + "..." if len(note.content) > 100 else note.content
+        content_preview = (
+            note.content[:100] + "..." if len(note.content) > 100 else note.content
+        )
 
-        result.append(CouncilNoteListItem(
-            id=note.id,
-            council_id=note.council_id,
-            meeting_id=note.meeting_id,
-            meeting_number=meeting_number,
-            user_id=note.user_id,
-            user_display_name=user.display_name if user else "Unknown",
-            title=note.title,
-            content_preview=content_preview,
-            created_at=note.created_at,
-            updated_at=note.updated_at,
-        ))
+        result.append(
+            CouncilNoteListItem(
+                id=note.id,
+                council_id=note.council_id,
+                meeting_id=note.meeting_id,
+                meeting_number=meeting_number,
+                user_id=note.user_id,
+                user_display_name=user.display_name if user else "Unknown",
+                title=note.title,
+                content_preview=content_preview,
+                created_at=note.created_at,
+                updated_at=note.updated_at,
+            )
+        )
 
     return result
 
@@ -136,7 +146,11 @@ def create_council_note(
 
     # If meeting_id provided, verify it belongs to the council
     if data.meeting_id:
-        meeting = db.query(CouncilMeeting).filter(CouncilMeeting.id == data.meeting_id).first()
+        meeting = (
+            db.query(CouncilMeeting)
+            .filter(CouncilMeeting.id == data.meeting_id)
+            .first()
+        )
         if not meeting:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

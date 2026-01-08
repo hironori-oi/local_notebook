@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
+
 from pydantic import BaseModel, Field
-from datetime import datetime
 
 
 class NotebookBase(BaseModel):
@@ -32,6 +33,7 @@ class NotebookOut(NotebookBase):
 
 class NotebookListOut(BaseModel):
     """Extended notebook schema for list view with owner info and counts."""
+
     id: UUID
     title: str
     description: Optional[str] = None
@@ -48,6 +50,7 @@ class NotebookListOut(BaseModel):
 
 class NotebookListResponse(BaseModel):
     """Paginated response for notebook list."""
+
     items: List[NotebookListOut]
     total: int = Field(..., ge=0, description="Total number of notebooks")
     offset: int = Field(..., ge=0, description="Number of items skipped")

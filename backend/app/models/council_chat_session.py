@@ -1,9 +1,11 @@
 """CouncilChatSession model for council chat conversations."""
+
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSON
-from sqlalchemy.sql import func
+
+from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -15,6 +17,7 @@ class CouncilChatSession(Base):
     Sessions allow users to maintain separate conversation contexts,
     with the ability to select specific meetings for RAG context.
     """
+
     __tablename__ = "council_chat_sessions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

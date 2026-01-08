@@ -1,10 +1,12 @@
 """
 Tests for minutes endpoints.
 """
+
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from unittest.mock import patch, AsyncMock
 
 from app.models.notebook import Notebook
 from app.models.user import User
@@ -80,7 +82,9 @@ class TestCreateMinute:
     ):
         """Test successful minute creation."""
         # Mock the embedding function
-        with patch("app.api.v1.minutes.embed_texts", new_callable=AsyncMock) as mock_embed:
+        with patch(
+            "app.api.v1.minutes.embed_texts", new_callable=AsyncMock
+        ) as mock_embed:
             mock_embed.return_value = [[0.1] * 384]  # Return mock embedding
 
             response = authenticated_client.post(
@@ -131,9 +135,7 @@ class TestCreateMinute:
 class TestGetMinute:
     """Tests for getting a single minute."""
 
-    def test_get_minute_success(
-        self, authenticated_client: TestClient, test_minute
-    ):
+    def test_get_minute_success(self, authenticated_client: TestClient, test_minute):
         """Test getting an existing minute."""
         response = authenticated_client.get(f"/api/v1/minutes/{test_minute.id}")
         assert response.status_code == 200
@@ -156,9 +158,7 @@ class TestGetMinute:
 class TestUpdateMinute:
     """Tests for updating minutes."""
 
-    def test_update_minute_title(
-        self, authenticated_client: TestClient, test_minute
-    ):
+    def test_update_minute_title(self, authenticated_client: TestClient, test_minute):
         """Test updating minute title."""
         response = authenticated_client.patch(
             f"/api/v1/minutes/{test_minute.id}",
@@ -168,11 +168,11 @@ class TestUpdateMinute:
         data = response.json()
         assert data["title"] == "Updated Title"
 
-    def test_update_minute_content(
-        self, authenticated_client: TestClient, test_minute
-    ):
+    def test_update_minute_content(self, authenticated_client: TestClient, test_minute):
         """Test updating minute content."""
-        with patch("app.api.v1.minutes.embed_texts", new_callable=AsyncMock) as mock_embed:
+        with patch(
+            "app.api.v1.minutes.embed_texts", new_callable=AsyncMock
+        ) as mock_embed:
             mock_embed.return_value = [[0.1] * 384]
 
             response = authenticated_client.patch(
@@ -196,9 +196,7 @@ class TestUpdateMinute:
 class TestDeleteMinute:
     """Tests for deleting minutes."""
 
-    def test_delete_minute_success(
-        self, authenticated_client: TestClient, test_minute
-    ):
+    def test_delete_minute_success(self, authenticated_client: TestClient, test_minute):
         """Test successful minute deletion."""
         response = authenticated_client.delete(f"/api/v1/minutes/{test_minute.id}")
         assert response.status_code == 204
@@ -232,9 +230,7 @@ class TestGetMinuteDetail:
 class TestUpdateMinuteSummary:
     """Tests for updating minute summary."""
 
-    def test_update_minute_summary(
-        self, authenticated_client: TestClient, test_minute
-    ):
+    def test_update_minute_summary(self, authenticated_client: TestClient, test_minute):
         """Test updating minute summary."""
         response = authenticated_client.patch(
             f"/api/v1/minutes/{test_minute.id}/summary",

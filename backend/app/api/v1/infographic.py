@@ -1,25 +1,25 @@
 """
 Infographic API endpoints for generating and managing infographics.
 """
+
 from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access, parse_uuid
-from app.models.notebook import Notebook
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.infographic import Infographic
+from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.infographic import (
-    InfographicCreateRequest,
-    InfographicResponse,
-    InfographicListItem,
-    InfographicListResponse,
-    InfographicStructure,
-)
+from app.schemas.infographic import (InfographicCreateRequest,
+                                     InfographicListItem,
+                                     InfographicListResponse,
+                                     InfographicResponse, InfographicStructure)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.infographic_planner import generate_infographic_structure
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
 
 router = APIRouter(prefix="/infographics", tags=["infographics"])
 
@@ -29,7 +29,11 @@ def _verify_notebook_access(db: Session, notebook_id: UUID, user: User) -> Noteb
     return check_notebook_access(db, notebook_id, user)
 
 
-@router.post("/{notebook_id}", response_model=InfographicResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{notebook_id}",
+    response_model=InfographicResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_infographic(
     notebook_id: str,
     data: InfographicCreateRequest,
@@ -109,10 +113,15 @@ def list_infographics(
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
     _verify_notebook_access(db, nb_uuid, current_user)
 
-    infographics = db.query(Infographic).filter(
-        Infographic.notebook_id == nb_uuid,
-        Infographic.created_by == current_user.id,
-    ).order_by(Infographic.created_at.desc()).all()
+    infographics = (
+        db.query(Infographic)
+        .filter(
+            Infographic.notebook_id == nb_uuid,
+            Infographic.created_by == current_user.id,
+        )
+        .order_by(Infographic.created_at.desc())
+        .all()
+    )
 
     items = [
         InfographicListItem(
@@ -140,10 +149,14 @@ def get_infographic(
     """
     inf_uuid = parse_uuid(infographic_id, "Infographic ID")
 
-    infographic = db.query(Infographic).filter(
-        Infographic.id == inf_uuid,
-        Infographic.created_by == current_user.id,
-    ).first()
+    infographic = (
+        db.query(Infographic)
+        .filter(
+            Infographic.id == inf_uuid,
+            Infographic.created_by == current_user.id,
+        )
+        .first()
+    )
 
     if not infographic:
         raise HTTPException(
@@ -176,10 +189,14 @@ def delete_infographic(
     ip_address, user_agent = get_client_info(request)
     inf_uuid = parse_uuid(infographic_id, "Infographic ID")
 
-    infographic = db.query(Infographic).filter(
-        Infographic.id == inf_uuid,
-        Infographic.created_by == current_user.id,
-    ).first()
+    infographic = (
+        db.query(Infographic)
+        .filter(
+            Infographic.id == inf_uuid,
+            Infographic.created_by == current_user.id,
+        )
+        .first()
+    )
 
     if not infographic:
         raise HTTPException(

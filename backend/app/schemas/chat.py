@@ -3,31 +3,36 @@ Chat schemas for request/response validation.
 
 Includes session management schemas for maintaining conversation context.
 """
+
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # Chat Session Schemas
 # =============================================================================
 
+
 class ChatSessionCreate(BaseModel):
     """Request schema for creating a new chat session."""
+
     title: Optional[str] = Field(
         None,
         max_length=255,
-        description="Optional title for the session. Auto-generated from first message if not provided."
+        description="Optional title for the session. Auto-generated from first message if not provided.",
     )
 
 
 class ChatSessionUpdate(BaseModel):
     """Request schema for updating a chat session."""
+
     title: Optional[str] = Field(None, max_length=255)
 
 
 class ChatSessionResponse(BaseModel):
     """Response schema for a chat session."""
+
     id: str
     notebook_id: str
     title: Optional[str] = None
@@ -41,6 +46,7 @@ class ChatSessionResponse(BaseModel):
 
 class ChatSessionListResponse(BaseModel):
     """Response schema for listing chat sessions."""
+
     sessions: List[ChatSessionResponse]
     total: int
 
@@ -49,30 +55,32 @@ class ChatSessionListResponse(BaseModel):
 # Chat Message Schemas
 # =============================================================================
 
+
 class ChatRequest(BaseModel):
     """Request schema for sending a chat message."""
+
     notebook_id: str
     session_id: Optional[str] = Field(
-        None,
-        description="Session ID. If not provided, a new session will be created."
+        None, description="Session ID. If not provided, a new session will be created."
     )
     source_ids: List[str] = Field(
         default_factory=list,
-        description="Source IDs to search. Empty means all sources in notebook."
+        description="Source IDs to search. Empty means all sources in notebook.",
     )
     question: str = Field(..., min_length=1, max_length=10000)
     use_rag: bool = Field(
         True,
-        description="Whether to use RAG search. If False, direct LLM conversation."
+        description="Whether to use RAG search. If False, direct LLM conversation.",
     )
     use_formatted_text: bool = Field(
         False,
-        description="Whether to use formatted_text instead of RAG chunks. Provides full document context."
+        description="Whether to use formatted_text instead of RAG chunks. Provides full document context.",
     )
 
 
 class ChatResponse(BaseModel):
     """Response schema for a chat message."""
+
     answer: str
     sources: List[str]  # "資料名(p.xx)" のような表示用文字列
     message_id: Optional[str] = None  # 保存されたメッセージのID
@@ -81,6 +89,7 @@ class ChatResponse(BaseModel):
 
 class MessageOut(BaseModel):
     """Response schema for a single message."""
+
     id: str
     session_id: Optional[str] = None
     notebook_id: str
@@ -98,6 +107,7 @@ class MessageOut(BaseModel):
 
 class ChatHistoryResponse(BaseModel):
     """Response schema for chat history."""
+
     session_id: str
     messages: List[MessageOut]
     total: int
@@ -107,8 +117,10 @@ class ChatHistoryResponse(BaseModel):
 # Async Chat Schemas
 # =============================================================================
 
+
 class AsyncChatResponse(BaseModel):
     """Response schema for async chat submission."""
+
     user_message_id: str
     assistant_message_id: str
     session_id: str
@@ -117,6 +129,7 @@ class AsyncChatResponse(BaseModel):
 
 class MessageStatusResponse(BaseModel):
     """Response schema for checking message status."""
+
     message_id: str
     status: str  # pending, generating, completed, failed
     content: Optional[str] = None

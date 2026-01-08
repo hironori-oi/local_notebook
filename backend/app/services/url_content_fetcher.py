@@ -7,10 +7,11 @@ This service handles:
 3. PDF text extraction (if URL points to PDF)
 4. Error handling with retry logic
 """
+
 import logging
 import re
-from typing import Optional, Tuple
 from io import BytesIO
+from typing import Optional, Tuple
 
 import httpx
 from bs4 import BeautifulSoup
@@ -35,8 +36,17 @@ USER_AGENT = (
 
 # HTML tags to remove (usually contain navigation, ads, etc.)
 TAGS_TO_REMOVE = [
-    "script", "style", "nav", "header", "footer", "aside",
-    "noscript", "iframe", "form", "button", "input",
+    "script",
+    "style",
+    "nav",
+    "header",
+    "footer",
+    "aside",
+    "noscript",
+    "iframe",
+    "form",
+    "button",
+    "input",
 ]
 
 # HTML tags that indicate main content
@@ -57,8 +67,10 @@ MAIN_CONTENT_SELECTORS = [
 # URL Content Fetcher
 # =============================================================================
 
+
 class URLContentFetchError(Exception):
     """Exception raised when URL content fetching fails."""
+
     pass
 
 
@@ -208,7 +220,19 @@ def _extract_text_with_structure(element) -> str:
     texts = []
 
     for child in element.descendants:
-        if child.name in ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "br"]:
+        if child.name in [
+            "p",
+            "div",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "li",
+            "tr",
+            "br",
+        ]:
             texts.append("\n")
         elif child.name is None and child.string:
             text = child.string.strip()
@@ -284,7 +308,9 @@ async def _extract_pdf_text(pdf_content: bytes) -> str:
             raise URLContentFetchError("PDFからテキストを抽出できませんでした")
 
         result = "\n\n".join(texts)
-        logger.info(f"Extracted {len(result)} characters from PDF ({len(pdf.pages)} pages)")
+        logger.info(
+            f"Extracted {len(result)} characters from PDF ({len(pdf.pages)} pages)"
+        )
         return result
 
     except URLContentFetchError:

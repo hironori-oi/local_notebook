@@ -3,6 +3,7 @@ Assets API endpoints for serving generated files.
 
 This module provides endpoints to serve generated images and other assets.
 """
+
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException

@@ -202,7 +202,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             # BaseHTTPMiddleware内ではHTTPExceptionを使わず、JSONResponseを直接返す
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                content={"detail": f"リクエストが多すぎます。{reset_time}秒後に再試行してください。"},
+                content={
+                    "detail": f"リクエストが多すぎます。{reset_time}秒後に再試行してください。"
+                },
                 headers={
                     "Retry-After": str(reset_time),
                     "X-RateLimit-Limit": str(limiter.max_requests),

@@ -9,19 +9,20 @@ This module handles:
 The generated summaries are used for email generation, while chunk-based
 RAG remains for chat functionality.
 """
+
 import logging
 from typing import Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
-from app.models.source import Source
-from app.models.minute import Minute
-from app.models.llm_settings import LLMSettings
-from app.services.llm_client import call_generation_llm
-from app.core.exceptions import LLMConnectionError
 from app.core.config import settings
+from app.core.exceptions import LLMConnectionError
+from app.db.session import SessionLocal
+from app.models.llm_settings import LLMSettings
+from app.models.minute import Minute
+from app.models.source import Source
+from app.services.llm_client import call_generation_llm
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +295,10 @@ MAX_SUMMARY_INPUT_LENGTH = settings.CONTENT_SUMMARY_MAX_LENGTH
 # Custom Prompt Helpers
 # =============================================================================
 
-def get_summary_prompts(db: Optional[Session], is_minute: bool) -> Tuple[Optional[str], Optional[str]]:
+
+def get_summary_prompts(
+    db: Optional[Session], is_minute: bool
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Get custom summary prompts from LLM settings.
 
@@ -309,7 +313,9 @@ def get_summary_prompts(db: Optional[Session], is_minute: bool) -> Tuple[Optiona
         return None, None
 
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -326,7 +332,9 @@ def get_summary_prompts(db: Optional[Session], is_minute: bool) -> Tuple[Optiona
     return system_prompt, user_template
 
 
-def get_format_prompts(db: Optional[Session], is_minute: bool) -> Tuple[Optional[str], Optional[str]]:
+def get_format_prompts(
+    db: Optional[Session], is_minute: bool
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Get custom format prompts from LLM settings.
 
@@ -341,7 +349,9 @@ def get_format_prompts(db: Optional[Session], is_minute: bool) -> Tuple[Optional
         return None, None
 
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -392,35 +402,35 @@ def _format_text_regex(raw_text: str) -> str:
     text = raw_text
 
     # 1. Normalize line endings (Windows -> Unix)
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     # 2. Remove trailing whitespace from each line
-    text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
+    text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
 
     # 3. Reduce excessive blank lines (3+ consecutive newlines -> 2)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     # 4. Fix unnatural line breaks within Japanese sentences
     # Pattern: Japanese character + newline + Japanese character (not a list marker)
     # This commonly happens with PDF text extraction
     text = re.sub(
-        r'([^\n\s。．.!！?？、，,\-\*\•\d])[\n]([^\n\s\-\*\•\d・①②③④⑤⑥⑦⑧⑨⑩])',
-        r'\1\2',
-        text
+        r"([^\n\s。．.!！?？、，,\-\*\•\d])[\n]([^\n\s\-\*\•\d・①②③④⑤⑥⑦⑧⑨⑩])",
+        r"\1\2",
+        text,
     )
 
     # 5. Fix line breaks after common Japanese particles that shouldn't end a line
-    text = re.sub(r'(の|を|に|へ|と|で|が|は|も|や)\n([^\n])', r'\1\2', text)
+    text = re.sub(r"(の|を|に|へ|と|で|が|は|も|や)\n([^\n])", r"\1\2", text)
 
     # 6. Remove page number patterns (common formats)
     # Pattern: standalone numbers that look like page numbers
-    text = re.sub(r'\n\s*-\s*\d+\s*-\s*\n', '\n', text)  # - 1 -
-    text = re.sub(r'\n\s*\d+\s*/\s*\d+\s*\n', '\n', text)  # 1/10
-    text = re.sub(r'\n\s*Page\s*\d+\s*\n', '\n', text, flags=re.IGNORECASE)  # Page 1
-    text = re.sub(r'\n\s*P\.\s*\d+\s*\n', '\n', text)  # P. 1
+    text = re.sub(r"\n\s*-\s*\d+\s*-\s*\n", "\n", text)  # - 1 -
+    text = re.sub(r"\n\s*\d+\s*/\s*\d+\s*\n", "\n", text)  # 1/10
+    text = re.sub(r"\n\s*Page\s*\d+\s*\n", "\n", text, flags=re.IGNORECASE)  # Page 1
+    text = re.sub(r"\n\s*P\.\s*\d+\s*\n", "\n", text)  # P. 1
 
     # 7. Normalize multiple spaces within lines to single space
-    text = re.sub(r'[ \t]{2,}', ' ', text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
 
     # 8. Remove leading/trailing whitespace from the entire text
     text = text.strip()
@@ -447,28 +457,28 @@ def _format_minute_text_regex(raw_text: str) -> str:
     text = raw_text
 
     # 1. Normalize line endings
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     # 2. Remove trailing whitespace from each line
-    text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
+    text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
 
     # 3. Reduce excessive blank lines (3+ -> 2)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     # 4. Normalize multiple spaces within lines to single space
     # But preserve indentation at line start
-    lines = text.split('\n')
+    lines = text.split("\n")
     normalized_lines = []
     for line in lines:
         # Preserve leading whitespace, normalize the rest
-        match = re.match(r'^(\s*)(.*?)$', line)
+        match = re.match(r"^(\s*)(.*?)$", line)
         if match:
             indent, content = match.groups()
-            content = re.sub(r'[ \t]{2,}', ' ', content)
+            content = re.sub(r"[ \t]{2,}", " ", content)
             normalized_lines.append(indent + content)
         else:
             normalized_lines.append(line)
-    text = '\n'.join(normalized_lines)
+    text = "\n".join(normalized_lines)
 
     # 5. Remove leading/trailing whitespace from the entire text
     text = text.strip()
@@ -479,6 +489,7 @@ def _format_minute_text_regex(raw_text: str) -> str:
 # =============================================================================
 # Core Processing Functions
 # =============================================================================
+
 
 async def format_text(raw_text: str) -> str:
     """
@@ -612,13 +623,16 @@ async def generate_summary(
     except Exception as e:
         error_type = type(e).__name__
         error_msg = str(e) or f"{error_type} (no message)"
-        logger.error(f"Summary generation failed: {error_type}: {error_msg}", exc_info=True)
+        logger.error(
+            f"Summary generation failed: {error_type}: {error_msg}", exc_info=True
+        )
         raise LLMConnectionError(f"要約生成に失敗しました: {error_msg}")
 
 
 # =============================================================================
 # Source Processing
 # =============================================================================
+
 
 async def process_source_content(
     db: Session,
@@ -677,10 +691,14 @@ async def process_source_content(
         except LLMConnectionError as e:
             logger.warning(f"Summary generation failed: {e}")
             # Fallback: use truncated formatted text as summary
-            fallback_summary = formatted[:2000] + "..." if len(formatted) > 2000 else formatted
+            fallback_summary = (
+                formatted[:2000] + "..." if len(formatted) > 2000 else formatted
+            )
             source.summary = fallback_summary
             source.processing_status = "completed"
-            source.processing_error = f"要約生成に失敗したため、整形テキストの一部を使用: {str(e)}"
+            source.processing_error = (
+                f"要約生成に失敗したため、整形テキストの一部を使用: {str(e)}"
+            )
             db.commit()
 
     except Exception as e:
@@ -715,6 +733,7 @@ async def process_source_content_background(
 # =============================================================================
 # Minute Processing
 # =============================================================================
+
 
 async def process_minute_content(
     db: Session,
@@ -776,10 +795,14 @@ async def process_minute_content(
         except LLMConnectionError as e:
             logger.warning(f"Minute summary generation failed: {e}")
             # Fallback: use truncated formatted content as summary
-            fallback_summary = formatted[:2000] + "..." if len(formatted) > 2000 else formatted
+            fallback_summary = (
+                formatted[:2000] + "..." if len(formatted) > 2000 else formatted
+            )
             minute.summary = fallback_summary
             minute.processing_status = "completed"
-            minute.processing_error = f"要約生成に失敗したため、整形テキストの一部を使用: {str(e)}"
+            minute.processing_error = (
+                f"要約生成に失敗したため、整形テキストの一部を使用: {str(e)}"
+            )
             db.commit()
 
     except Exception as e:

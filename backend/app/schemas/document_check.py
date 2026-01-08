@@ -1,6 +1,7 @@
 """Schemas for document checker API."""
+
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class CheckTypeInfo(BaseModel):
     """Information about a check type."""
+
     id: str
     name: str
     description: str
@@ -16,6 +18,7 @@ class CheckTypeInfo(BaseModel):
 
 class DocumentCheckIssueOut(BaseModel):
     """Output schema for a document check issue."""
+
     id: UUID
     category: str
     severity: str
@@ -33,6 +36,7 @@ class DocumentCheckIssueOut(BaseModel):
 
 class DocumentCheckSummary(BaseModel):
     """Summary of a document check (for list view)."""
+
     id: UUID
     filename: str
     file_type: str
@@ -50,6 +54,7 @@ class DocumentCheckSummary(BaseModel):
 
 class DocumentCheckDetail(BaseModel):
     """Detailed document check result."""
+
     id: UUID
     filename: str
     file_type: str
@@ -72,6 +77,7 @@ class DocumentCheckDetail(BaseModel):
 
 class DocumentCheckUploadResponse(BaseModel):
     """Response for document upload."""
+
     id: UUID
     filename: str
     file_type: str
@@ -81,6 +87,7 @@ class DocumentCheckUploadResponse(BaseModel):
 
 class DocumentCheckListResponse(BaseModel):
     """Response for document list."""
+
     items: List[DocumentCheckSummary]
     total: int
     offset: int
@@ -89,11 +96,13 @@ class DocumentCheckListResponse(BaseModel):
 
 class IssueUpdateRequest(BaseModel):
     """Request to update an issue's status."""
+
     is_accepted: bool
 
 
 class IssueUpdateResponse(BaseModel):
     """Response for issue update."""
+
     id: UUID
     is_accepted: bool
     message: str
@@ -101,6 +110,7 @@ class IssueUpdateResponse(BaseModel):
 
 class UserCheckPreferenceOut(BaseModel):
     """Output schema for user check preferences."""
+
     default_check_types: List[str]
     custom_terminology: Optional[Dict[str, str]] = None
 
@@ -110,10 +120,12 @@ class UserCheckPreferenceOut(BaseModel):
 
 class UserCheckPreferenceUpdate(BaseModel):
     """Request to update user check preferences."""
+
     default_check_types: Optional[List[str]] = None
     custom_terminology: Optional[Dict[str, str]] = None
 
 
 class CheckTypesResponse(BaseModel):
     """Response for check types list."""
+
     check_types: List[CheckTypeInfo]

@@ -4,27 +4,29 @@ Council Infographic Planner service for generating infographic structures using 
 This module handles the generation of structured JSON infographic content
 from council meeting agendas using RAG context and LLM.
 """
+
 import logging
 from typing import List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.schemas.infographic import InfographicStructure
-from app.services.context_retriever import retrieve_council_context, format_context_for_prompt
-from app.services.infographic_base import (
-    build_system_prompt,
-    build_user_template,
-    generate_infographic_from_context,
-)
 from app.core.exceptions import BadRequestError
 from app.models.llm_settings import LLMSettings
+from app.schemas.infographic import InfographicStructure
+from app.services.context_retriever import (format_context_for_prompt,
+                                            retrieve_council_context)
+from app.services.infographic_base import (build_system_prompt,
+                                           build_user_template,
+                                           generate_infographic_from_context)
 
 logger = logging.getLogger(__name__)
 
 
 # Additional rules specific to council infographics
-COUNCIL_ADDITIONAL_RULES = "- 発言者の意見や議論のポイントがあれば、誰がどのような意見を述べたかを含める"
+COUNCIL_ADDITIONAL_RULES = (
+    "- 発言者の意見や議論のポイントがあれば、誰がどのような意見を述べたかを含める"
+)
 
 # System prompt for council infographic generation (using shared base with additional rules)
 COUNCIL_INFOGRAPHIC_SYSTEM_PROMPT = build_system_prompt(
@@ -50,7 +52,9 @@ def get_council_infographic_prompts(db: Session) -> Tuple[Optional[str], Optiona
         Tuple of (system_prompt, user_template), both can be None if using defaults
     """
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -86,7 +90,9 @@ async def generate_council_infographic_structure(
         BadRequestError: If context retrieval or JSON parsing fails
         LLMConnectionError: If LLM service is unavailable
     """
-    logger.info(f"Generating council infographic for meeting {meeting_id}, topic: {topic[:50]}...")
+    logger.info(
+        f"Generating council infographic for meeting {meeting_id}, topic: {topic[:50]}..."
+    )
 
     # 1. Retrieve context from council agendas
     context_result = await retrieve_council_context(
@@ -109,7 +115,9 @@ async def generate_council_infographic_structure(
 
     # 3. Get custom prompts if available
     custom_system, custom_user = get_council_infographic_prompts(db)
-    system_prompt = custom_system if custom_system else COUNCIL_INFOGRAPHIC_SYSTEM_PROMPT
+    system_prompt = (
+        custom_system if custom_system else COUNCIL_INFOGRAPHIC_SYSTEM_PROMPT
+    )
     user_template = custom_user if custom_user else COUNCIL_INFOGRAPHIC_USER_TEMPLATE
 
     # 4. Generate using shared function

@@ -6,14 +6,14 @@ This module provides tasks for:
 - Processing minutes (formatting, summary generation)
 """
 
-import logging
 import asyncio
+import logging
 from uuid import UUID
 
 from celery import shared_task
 
-from app.celery_app.tasks.base import DatabaseTask
 from app.celery_app.config import RETRY_CONFIG, RETRYABLE_EXCEPTIONS
+from app.celery_app.tasks.base import DatabaseTask
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +111,7 @@ def process_minute_task(self, minute_id: str):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(
-                process_minute_content(db, UUID(minute_id))
-            )
+            loop.run_until_complete(process_minute_content(db, UUID(minute_id)))
         finally:
             loop.close()
 

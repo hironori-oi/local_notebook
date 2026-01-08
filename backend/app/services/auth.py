@@ -1,6 +1,7 @@
 """
 Authentication service - JWT token management and password hashing.
 """
+
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID

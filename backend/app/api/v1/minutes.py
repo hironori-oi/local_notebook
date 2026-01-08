@@ -3,32 +3,30 @@ Minutes API endpoints for managing meeting minutes.
 
 Minutes are text-based records (not file uploads) that can be linked to documents.
 """
+
 import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
+                     Request, status)
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access, parse_uuid
+from app.celery_app.tasks.content import enqueue_minute_processing
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
+from app.models.minute import Minute
+from app.models.minute_chunk import MinuteChunk
+from app.models.minute_document import MinuteDocument
 from app.models.notebook import Notebook
 from app.models.source import Source
-from app.models.minute import Minute
-from app.models.minute_document import MinuteDocument
-from app.models.minute_chunk import MinuteChunk
 from app.models.user import User
-from app.schemas.minute import (
-    MinuteCreate,
-    MinuteUpdate,
-    MinuteOut,
-    MinuteListItem,
-    MinuteDocumentsUpdate,
-    MinuteDetailOut,
-    MinuteSummaryUpdate,
-)
+from app.schemas.minute import (MinuteCreate, MinuteDetailOut,
+                                MinuteDocumentsUpdate, MinuteListItem,
+                                MinuteOut, MinuteSummaryUpdate, MinuteUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.embedding import embed_texts
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
-from app.celery_app.tasks.content import enqueue_minute_processing
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +59,11 @@ def _get_minute_with_access_check(db: Session, minute_id: UUID, user: User) -> M
 
 def _get_document_ids(db: Session, minute_id: UUID) -> List[UUID]:
     """Get list of document IDs linked to a minute."""
-    links = db.query(MinuteDocument.document_id).filter(
-        MinuteDocument.minute_id == minute_id
-    ).all()
+    links = (
+        db.query(MinuteDocument.document_id)
+        .filter(MinuteDocument.minute_id == minute_id)
+        .all()
+    )
     return [link[0] for link in links]
 
 
@@ -97,13 +97,15 @@ async def _create_chunks_with_embeddings(
     start = 0
 
     while start < len(content):
-        chunk_text = content[start:start + MAX_CHUNK_CHARS]
+        chunk_text = content[start : start + MAX_CHUNK_CHARS]
         if chunk_text.strip():
-            chunks_data.append({
-                "minute_id": minute_id,
-                "chunk_index": chunk_index,
-                "content": chunk_text,
-            })
+            chunks_data.append(
+                {
+                    "minute_id": minute_id,
+                    "chunk_index": chunk_index,
+                    "content": chunk_text,
+                }
+            )
             chunk_index += 1
         start += MAX_CHUNK_CHARS
 
@@ -141,41 +143,55 @@ def list_minutes(
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
     _verify_notebook_access(db, nb_uuid, current_user)
 
-    minutes = db.query(Minute).filter(
-        Minute.notebook_id == nb_uuid,
-    ).order_by(Minute.created_at.desc()).all()
+    minutes = (
+        db.query(Minute)
+        .filter(
+            Minute.notebook_id == nb_uuid,
+        )
+        .order_by(Minute.created_at.desc())
+        .all()
+    )
 
     if not minutes:
         return []
 
     # Batch fetch document counts to avoid N+1 queries
     minute_ids = [m.id for m in minutes]
-    doc_counts = db.query(
-        MinuteDocument.minute_id,
-        func.count(MinuteDocument.document_id).label("count")
-    ).filter(
-        MinuteDocument.minute_id.in_(minute_ids)
-    ).group_by(MinuteDocument.minute_id).all()
+    doc_counts = (
+        db.query(
+            MinuteDocument.minute_id,
+            func.count(MinuteDocument.document_id).label("count"),
+        )
+        .filter(MinuteDocument.minute_id.in_(minute_ids))
+        .group_by(MinuteDocument.minute_id)
+        .all()
+    )
 
     doc_count_map = {row.minute_id: row.count for row in doc_counts}
 
     result = []
     for minute in minutes:
-        result.append(MinuteListItem(
-            id=minute.id,
-            notebook_id=minute.notebook_id,
-            title=minute.title,
-            document_count=doc_count_map.get(minute.id, 0),
-            processing_status=minute.processing_status,
-            has_summary=minute.summary is not None and len(minute.summary) > 0,
-            created_at=minute.created_at,
-            updated_at=minute.updated_at,
-        ))
+        result.append(
+            MinuteListItem(
+                id=minute.id,
+                notebook_id=minute.notebook_id,
+                title=minute.title,
+                document_count=doc_count_map.get(minute.id, 0),
+                processing_status=minute.processing_status,
+                has_summary=minute.summary is not None and len(minute.summary) > 0,
+                created_at=minute.created_at,
+                updated_at=minute.updated_at,
+            )
+        )
 
     return result
 
 
-@router.post("/notebook/{notebook_id}", response_model=MinuteOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/notebook/{notebook_id}",
+    response_model=MinuteOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_minute(
     notebook_id: str,
     data: MinuteCreate,
@@ -198,10 +214,14 @@ async def create_minute(
     if data.document_ids:
         # Check that all documents exist and belong to the same notebook
         for doc_id in data.document_ids:
-            source = db.query(Source).filter(
-                Source.id == doc_id,
-                Source.notebook_id == nb_uuid,
-            ).first()
+            source = (
+                db.query(Source)
+                .filter(
+                    Source.id == doc_id,
+                    Source.notebook_id == nb_uuid,
+                )
+                .first()
+            )
             if not source:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -265,7 +285,9 @@ async def create_minute(
     # Trigger background processing for formatting and summary generation
     if data.content.strip():
         task_id = enqueue_minute_processing(minute.id)
-        logger.info(f"Minute processing enqueued: {minute.id}, celery_task_id={task_id}")
+        logger.info(
+            f"Minute processing enqueued: {minute.id}, celery_task_id={task_id}"
+        )
 
     return _minute_to_out(minute, data.document_ids)
 
@@ -318,7 +340,9 @@ async def update_minute(
 
         # Create new chunks with embeddings
         try:
-            chunks_count = await _create_chunks_with_embeddings(db, minute.id, data.content)
+            chunks_count = await _create_chunks_with_embeddings(
+                db, minute.id, data.content
+            )
         except Exception as e:
             logger.error(f"Failed to regenerate embeddings for minute: {e}")
             db.rollback()
@@ -355,7 +379,9 @@ async def update_minute(
         db.commit()
 
         task_id = enqueue_minute_processing(minute.id)
-        logger.info(f"Minute processing enqueued for updated minute: {minute.id}, celery_task_id={task_id}")
+        logger.info(
+            f"Minute processing enqueued for updated minute: {minute.id}, celery_task_id={task_id}"
+        )
 
     document_ids = _get_document_ids(db, minute.id)
     return _minute_to_out(minute, document_ids)
@@ -378,10 +404,14 @@ def update_minute_documents(
 
     # Validate document_ids
     for doc_id in data.document_ids:
-        source = db.query(Source).filter(
-            Source.id == doc_id,
-            Source.notebook_id == minute.notebook_id,
-        ).first()
+        source = (
+            db.query(Source)
+            .filter(
+                Source.id == doc_id,
+                Source.notebook_id == minute.notebook_id,
+            )
+            .first()
+        )
         if not source:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

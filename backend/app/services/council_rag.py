@@ -6,29 +6,29 @@ This module handles:
 - Conversation history management within sessions
 - LLM prompt construction with context from selected meetings/agendas
 """
-import logging
-from typing import List, Optional, Dict
-from uuid import UUID
-import json
 
+import json
+import logging
+from typing import Dict, List, Optional
+from uuid import UUID
+
+from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.orm import Session
-from sqlalchemy import select, text, func, bindparam
 from sqlalchemy.types import String
 
+from app.core.config import settings
+from app.core.exceptions import (BadRequestError, EmbeddingError,
+                                 LLMConnectionError)
+from app.models.council_agenda_item import CouncilAgendaItem
+from app.models.council_chat_session import CouncilChatSession
+from app.models.council_meeting import CouncilMeeting
+from app.models.council_message import CouncilMessage
 from app.schemas.council_chat import CouncilChatRequest, CouncilChatResponse
 from app.services.embedding import embed_texts
 from app.services.llm_client import call_llm
-from app.services.rag_utils import (
-    get_conversation_history_generic,
-    update_session_timestamp,
-    format_embedding_for_pgvector,
-)
-from app.models.council_meeting import CouncilMeeting
-from app.models.council_agenda_item import CouncilAgendaItem
-from app.models.council_chat_session import CouncilChatSession
-from app.models.council_message import CouncilMessage
-from app.core.config import settings
-from app.core.exceptions import BadRequestError, LLMConnectionError, EmbeddingError
+from app.services.rag_utils import (format_embedding_for_pgvector,
+                                    get_conversation_history_generic,
+                                    update_session_timestamp)
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ async def council_rag_answer(
         valid_count = db.execute(
             select(func.count(CouncilMeeting.id)).where(
                 CouncilMeeting.id.in_(meeting_ids),
-                CouncilMeeting.council_id == council_uuid
+                CouncilMeeting.council_id == council_uuid,
             )
         ).scalar()
 
@@ -262,9 +262,15 @@ async def council_rag_answer(
     source_refs: List[dict] = []
 
     for (
-        _id, content, chunk_type,
-        agenda_number, agenda_title, agenda_id,
-        meeting_number, meeting_title, meeting_id
+        _id,
+        content,
+        chunk_type,
+        agenda_number,
+        agenda_title,
+        agenda_id,
+        meeting_number,
+        meeting_title,
+        meeting_id,
     ) in rows:
         contexts.append(content)
 
@@ -278,15 +284,17 @@ async def council_rag_answer(
             ref_text += f" {agenda_title}"
         ref_text += f" ({type_label})"
 
-        source_refs.append({
-            "meeting_id": str(meeting_id),
-            "meeting_number": meeting_number,
-            "agenda_id": str(agenda_id),
-            "agenda_number": agenda_number,
-            "agenda_title": agenda_title,
-            "type": chunk_type,
-            "excerpt": content[:100] + "..." if len(content) > 100 else content,
-        })
+        source_refs.append(
+            {
+                "meeting_id": str(meeting_id),
+                "meeting_number": meeting_number,
+                "agenda_id": str(agenda_id),
+                "agenda_number": agenda_number,
+                "agenda_title": agenda_title,
+                "type": chunk_type,
+                "excerpt": content[:100] + "..." if len(content) > 100 else content,
+            }
+        )
 
     # 4. Build LLM messages
     if not contexts:

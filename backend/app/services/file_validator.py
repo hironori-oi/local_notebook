@@ -34,7 +34,7 @@ FILE_SIGNATURES: Dict[str, list[Tuple[bytes, int, str]]] = {
         (b"PK\x07\x08", 0, "PPTX/Office Open XML (spanned)"),
     ],
     "txt": [],  # Text files don't have magic bytes
-    "md": [],   # Markdown files don't have magic bytes
+    "md": [],  # Markdown files don't have magic bytes
 }
 
 # MIME types for supported file types
@@ -88,23 +88,19 @@ def validate_file_extension(filename: str, allowed_extensions: set[str]) -> str:
         FileValidationError: If extension is not allowed
     """
     if not filename:
-        raise FileValidationError(
-            "ファイル名が空です",
-            error_code="EMPTY_FILENAME"
-        )
+        raise FileValidationError("ファイル名が空です", error_code="EMPTY_FILENAME")
 
     suffix = Path(filename).suffix.lower()
     if not suffix:
         raise FileValidationError(
-            "ファイル拡張子がありません",
-            error_code="NO_EXTENSION"
+            "ファイル拡張子がありません", error_code="NO_EXTENSION"
         )
 
     extension = suffix.lstrip(".")
     if extension not in allowed_extensions:
         raise FileValidationError(
             f"サポートされていないファイル形式です: {extension}",
-            error_code="UNSUPPORTED_TYPE"
+            error_code="UNSUPPORTED_TYPE",
         )
 
     return extension
@@ -132,7 +128,7 @@ def validate_magic_bytes(content: bytes, file_type: str) -> bool:
 
     for magic_bytes, offset, description in signatures:
         if len(content) >= offset + len(magic_bytes):
-            if content[offset:offset + len(magic_bytes)] == magic_bytes:
+            if content[offset : offset + len(magic_bytes)] == magic_bytes:
                 logger.debug(f"File matched signature: {description}")
                 return True
 
@@ -153,7 +149,10 @@ def validate_text_content_safety(content: bytes) -> Tuple[bool, Optional[str]]:
 
     for pattern in DANGEROUS_PATTERNS:
         if pattern.lower() in content_lower:
-            return False, f"潜在的に危険なコンテンツが検出されました: {pattern.decode('utf-8', errors='ignore')}"
+            return (
+                False,
+                f"潜在的に危険なコンテンツが検出されました: {pattern.decode('utf-8', errors='ignore')}",
+            )
 
     return True, None
 
@@ -176,7 +175,7 @@ def validate_file_size(content: bytes, max_size_mb: int) -> bool:
     if len(content) > max_bytes:
         raise FileValidationError(
             f"ファイルサイズが大きすぎます（最大 {max_size_mb}MB）",
-            error_code="FILE_TOO_LARGE"
+            error_code="FILE_TOO_LARGE",
         )
     return True
 
@@ -210,12 +209,10 @@ def validate_uploaded_file(
 
     # 3. Validate magic bytes
     if not validate_magic_bytes(content, file_type):
-        logger.warning(
-            f"File {filename} has invalid magic bytes for type {file_type}"
-        )
+        logger.warning(f"File {filename} has invalid magic bytes for type {file_type}")
         raise FileValidationError(
             f"ファイルの内容が拡張子（{file_type}）と一致しません",
-            error_code="INVALID_CONTENT"
+            error_code="INVALID_CONTENT",
         )
 
     # 4. For text files, check for dangerous content
@@ -225,7 +222,7 @@ def validate_uploaded_file(
             logger.warning(f"Dangerous content detected in {filename}: {error_msg}")
             raise FileValidationError(
                 error_msg or "危険なコンテンツが検出されました",
-                error_code="DANGEROUS_CONTENT"
+                error_code="DANGEROUS_CONTENT",
             )
 
     logger.info(f"File {filename} passed all validations")

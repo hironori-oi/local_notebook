@@ -1,7 +1,9 @@
 """
 Tests for source endpoints.
 """
+
 import io
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -26,7 +28,10 @@ class TestListSources:
         assert data["total"] == 0
 
     def test_list_sources_with_data(
-        self, authenticated_client: TestClient, test_notebook: Notebook, test_source: Source
+        self,
+        authenticated_client: TestClient,
+        test_notebook: Notebook,
+        test_source: Source,
     ):
         """Test listing sources with existing data."""
         response = authenticated_client.get(
@@ -63,9 +68,7 @@ class TestUploadSource:
     ):
         """Test successful text file upload."""
         file_content = b"This is test content for the uploaded file."
-        files = {
-            "file": ("test_upload.txt", io.BytesIO(file_content), "text/plain")
-        }
+        files = {"file": ("test_upload.txt", io.BytesIO(file_content), "text/plain")}
         response = authenticated_client.post(
             f"/api/v1/notebooks/{test_notebook.id}/sources",
             files=files,
@@ -80,9 +83,7 @@ class TestUploadSource:
         self, authenticated_client: TestClient, test_notebook: Notebook
     ):
         """Test that empty files are rejected."""
-        files = {
-            "file": ("empty.txt", io.BytesIO(b""), "text/plain")
-        }
+        files = {"file": ("empty.txt", io.BytesIO(b""), "text/plain")}
         response = authenticated_client.post(
             f"/api/v1/notebooks/{test_notebook.id}/sources",
             files=files,
@@ -94,9 +95,7 @@ class TestUploadSource:
     ):
         """Test that unsupported file types are rejected."""
         file_content = b"#!/bin/bash\necho 'hello'"
-        files = {
-            "file": ("script.sh", io.BytesIO(file_content), "application/x-sh")
-        }
+        files = {"file": ("script.sh", io.BytesIO(file_content), "application/x-sh")}
         response = authenticated_client.post(
             f"/api/v1/notebooks/{test_notebook.id}/sources",
             files=files,
@@ -108,9 +107,7 @@ class TestUploadSource:
     ):
         """Test that users cannot upload to other users' notebooks."""
         file_content = b"Test content"
-        files = {
-            "file": ("test.txt", io.BytesIO(file_content), "text/plain")
-        }
+        files = {"file": ("test.txt", io.BytesIO(file_content), "text/plain")}
         response = authenticated_client.post(
             f"/api/v1/notebooks/{other_user_notebook.id}/sources",
             files=files,

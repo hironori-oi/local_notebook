@@ -4,22 +4,22 @@ Infographic Planner service for generating infographic structures using LLM.
 This module handles the generation of structured JSON infographic content
 from notebook sources using RAG context and LLM.
 """
-import logging
+
 import json
+import logging
 from typing import List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.schemas.infographic import InfographicStructure
-from app.services.context_retriever import retrieve_context, format_context_for_prompt
-from app.services.infographic_base import (
-    build_system_prompt,
-    build_user_template,
-    generate_infographic_from_context,
-)
 from app.core.exceptions import BadRequestError
 from app.models.llm_settings import LLMSettings
+from app.schemas.infographic import InfographicStructure
+from app.services.context_retriever import (format_context_for_prompt,
+                                            retrieve_context)
+from app.services.infographic_base import (build_system_prompt,
+                                           build_user_template,
+                                           generate_infographic_from_context)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,9 @@ def get_infographic_prompts(db: Session) -> Tuple[Optional[str], Optional[str]]:
         Tuple of (system_prompt, user_template), both can be None if using defaults
     """
     # Get system-level LLM settings (user_id is NULL)
-    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    settings_record = (
+        db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
+    )
 
     if not settings_record or not settings_record.prompt_settings:
         return None, None
@@ -81,7 +83,9 @@ async def generate_infographic_structure(
         BadRequestError: If context retrieval or JSON parsing fails
         LLMConnectionError: If LLM service is unavailable
     """
-    logger.info(f"Generating infographic for notebook {notebook_id}, topic: {topic[:50]}...")
+    logger.info(
+        f"Generating infographic for notebook {notebook_id}, topic: {topic[:50]}..."
+    )
 
     # 1. Retrieve context from sources
     context_result = await retrieve_context(
@@ -137,10 +141,10 @@ def get_infographic_schema_example() -> str:
                     "再エネ比率の拡大に伴い、天候による発電量の変動が大きくなり、電力の需給バランスを保つことが難しくなっている",
                     "特に太陽光発電は日中の出力変動が激しく、急激な出力低下時に他の電源でカバーする必要がある",
                     "従来の火力発電は起動・停止に時間がかかるため、短時間の変動への対応が困難になっている",
-                    "一部のエリアでは再エネの発電量が需要を上回り、出力制御（発電の抑制）を行うケースが増加している"
+                    "一部のエリアでは再エネの発電量が需要を上回り、出力制御（発電の抑制）を行うケースが増加している",
                 ],
                 "detail": "再エネ導入拡大に伴い、特に太陽光発電の出力変動への対応が急務となっている。従来の火力発電による調整では応答速度に限界があり、新たな調整力の確保が必要。電力システム全体での対応策が求められている。",
-                "image_prompt_en": "flat infographic style, warning icon, fluctuating line graph showing energy supply demand imbalance, orange and yellow colors with red accent, minimal clean design"
+                "image_prompt_en": "flat infographic style, warning icon, fluctuating line graph showing energy supply demand imbalance, orange and yellow colors with red accent, minimal clean design",
             },
             {
                 "id": "section_2",
@@ -151,10 +155,10 @@ def get_infographic_schema_example() -> str:
                     "短周期調整力は数分〜十数分単位の変動に対応するもので、蓄電池や揚水発電など応答速度の速い設備が適している",
                     "長周期調整力は数時間単位の変動に対応するもので、LNG火力など起動時間は長いが持続的に出力調整できる電源が担う",
                     "デマンドレスポンス（DR）は需要側で電力使用を調整する仕組みで、工場の操業シフトなどにより需給バランスを改善できる",
-                    "地域間連系線を活用することで、余剰電力を他エリアに送電し、エリア間で需給を融通し合うことが可能になる"
+                    "地域間連系線を活用することで、余剰電力を他エリアに送電し、エリア間で需給を融通し合うことが可能になる",
                 ],
                 "detail": "調整力は応答速度によって短周期・長周期に分類され、それぞれ異なる電源・設備で対応する。単一の手段ではなく、複数の調整力を組み合わせて電力システム全体の安定性を確保することが重要。",
-                "image_prompt_en": "flat infographic style, comparison diagram showing battery vs thermal power response time, blue and green colors with icons, professional business chart, clean white background"
+                "image_prompt_en": "flat infographic style, comparison diagram showing battery vs thermal power response time, blue and green colors with icons, professional business chart, clean white background",
             },
             {
                 "id": "section_3",
@@ -165,10 +169,10 @@ def get_infographic_schema_example() -> str:
                     "系統用蓄電池の導入により、短時間の需給変動に素早く対応できる調整力を確保し、再エネの出力制御を減らすことを目指す",
                     "既存の火力発電所に柔軟性向上のための改修を行い、より速い起動・出力調整ができるよう設備を改善する",
                     "DR普及のためのインセンティブ制度を整備し、需要家が電力使用を調整するメリットを提供することで参加を促進する",
-                    "連系線の増強工事を進め、エリア間での電力融通能力を高めることで、局所的な需給アンバランスを解消する"
+                    "連系線の増強工事を進め、エリア間での電力融通能力を高めることで、局所的な需給アンバランスを解消する",
                 ],
                 "detail": "各対策はそれぞれ特徴があり、蓄電池は即応性、火力改修は既存資産活用、DRは需要側参加、連系線は広域対応という役割を担う。これらを総合的に推進することで、再エネ大量導入時代の電力システムを支える。",
-                "image_prompt_en": "flat infographic style, four solution icons battery storage DR transmission grid, purple and blue accent colors, clean minimalist design, professional presentation"
+                "image_prompt_en": "flat infographic style, four solution icons battery storage DR transmission grid, purple and blue accent colors, clean minimalist design, professional presentation",
             },
             {
                 "id": "section_4",
@@ -179,12 +183,12 @@ def get_infographic_schema_example() -> str:
                     "系統用蓄電池の入札公募を実施し、事業者を選定して導入を進める。設置場所は系統の状況を踏まえて決定する",
                     "DR事業者との契約締結を進め、需要側の調整力を確保する。参加のハードルを下げる制度設計も並行して検討する",
                     "連系線増強工事に着手し、計画的に工事を進める。工事期間中の系統運用への影響も考慮しながら実施する",
-                    "進捗状況を定期的にモニタリングし、目標達成状況を評価する。必要に応じて計画の見直しや追加対策を検討する"
+                    "進捗状況を定期的にモニタリングし、目標達成状況を評価する。必要に応じて計画の見直しや追加対策を検討する",
                 ],
                 "detail": "各施策を並行して進め、必要な調整力を段階的に確保していく。関係部門・事業者との連携体制を構築し、進捗管理と課題解決を継続的に行う。状況変化に応じて柔軟に計画を見直すことも重要。",
-                "image_prompt_en": "flat infographic style, timeline roadmap with action items and milestones, checkmark icons, green progress indicators, clean minimalist design, professional business presentation"
-            }
+                "image_prompt_en": "flat infographic style, timeline roadmap with action items and milestones, checkmark icons, green progress indicators, clean minimalist design, professional business presentation",
+            },
         ],
-        "footer_note": "出典：社内資料より作成"
+        "footer_note": "出典：社内資料より作成",
     }
     return json.dumps(example, ensure_ascii=False, indent=2)

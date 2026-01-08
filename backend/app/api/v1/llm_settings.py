@@ -1,6 +1,7 @@
 """
 LLM Settings API endpoints for managing user-specific LLM configurations.
 """
+
 import logging
 import time
 from typing import Optional
@@ -10,58 +11,41 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
 from app.core.config import settings as app_settings
-from app.models.llm_settings import LLMSettings, DEFAULT_FEATURE_SETTINGS, DEFAULT_PROMPT_SETTINGS
+from app.core.deps import get_current_user, get_db
+from app.models.llm_settings import (DEFAULT_FEATURE_SETTINGS,
+                                     DEFAULT_PROMPT_SETTINGS, LLMSettings)
 from app.models.user import User
-from app.schemas.llm_settings import (
-    LLMSettingsOut,
-    LLMSettingsUpdate,
-    LLMConnectionTestRequest,
-    LLMConnectionTestResponse,
-    ModelsListResponse,
-    ModelInfo,
-    PromptSettingsUpdate,
-    DefaultPromptsOut,
-)
+from app.schemas.llm_settings import (DefaultPromptsOut,
+                                      LLMConnectionTestRequest,
+                                      LLMConnectionTestResponse,
+                                      LLMSettingsOut, LLMSettingsUpdate,
+                                      ModelInfo, ModelsListResponse,
+                                      PromptSettingsUpdate)
+from app.services.content_processor import (FORMAT_SYSTEM_PROMPT,
+                                            FORMAT_USER_TEMPLATE,
+                                            MINUTE_FORMAT_SYSTEM_PROMPT,
+                                            MINUTE_FORMAT_USER_TEMPLATE,
+                                            MINUTE_SUMMARY_SYSTEM_PROMPT,
+                                            MINUTE_SUMMARY_USER_TEMPLATE,
+                                            SUMMARY_SYSTEM_PROMPT,
+                                            SUMMARY_USER_TEMPLATE)
 from app.services.council_content_processor import (
-    COUNCIL_SUMMARY_SYSTEM_PROMPT,
-    COUNCIL_SUMMARY_USER_TEMPLATE,
     COUNCIL_MINUTES_SUMMARY_SYSTEM_PROMPT,
-    COUNCIL_MINUTES_SUMMARY_USER_TEMPLATE,
-)
-from app.services.email_generator import (
-    EMAIL_SYSTEM_PROMPT,
-    EMAIL_USER_TEMPLATE,
-)
-from app.services.infographic_planner import (
-    INFOGRAPHIC_SYSTEM_PROMPT,
-    INFOGRAPHIC_USER_TEMPLATE,
-)
+    COUNCIL_MINUTES_SUMMARY_USER_TEMPLATE, COUNCIL_SUMMARY_SYSTEM_PROMPT,
+    COUNCIL_SUMMARY_USER_TEMPLATE)
 from app.services.council_infographic_planner import (
-    COUNCIL_INFOGRAPHIC_SYSTEM_PROMPT,
-    COUNCIL_INFOGRAPHIC_USER_TEMPLATE,
-)
-from app.services.content_processor import (
-    FORMAT_SYSTEM_PROMPT,
-    FORMAT_USER_TEMPLATE,
-    MINUTE_FORMAT_SYSTEM_PROMPT,
-    MINUTE_FORMAT_USER_TEMPLATE,
-    SUMMARY_SYSTEM_PROMPT,
-    SUMMARY_USER_TEMPLATE,
-    MINUTE_SUMMARY_SYSTEM_PROMPT,
-    MINUTE_SUMMARY_USER_TEMPLATE,
-)
-from app.services.document_checker import (
-    DOCUMENT_CHECK_SYSTEM_PROMPT,
-    DOCUMENT_CHECK_USER_TEMPLATE,
-)
-from app.services.slide_generator import (
-    SLIDE_GENERATION_SYSTEM_PROMPT,
-    SLIDE_GENERATION_USER_TEMPLATE,
-    SLIDE_REFINEMENT_SYSTEM_PROMPT,
-    SLIDE_REFINEMENT_USER_TEMPLATE,
-)
+    COUNCIL_INFOGRAPHIC_SYSTEM_PROMPT, COUNCIL_INFOGRAPHIC_USER_TEMPLATE)
+from app.services.document_checker import (DOCUMENT_CHECK_SYSTEM_PROMPT,
+                                           DOCUMENT_CHECK_USER_TEMPLATE)
+from app.services.email_generator import (EMAIL_SYSTEM_PROMPT,
+                                          EMAIL_USER_TEMPLATE)
+from app.services.infographic_planner import (INFOGRAPHIC_SYSTEM_PROMPT,
+                                              INFOGRAPHIC_USER_TEMPLATE)
+from app.services.slide_generator import (SLIDE_GENERATION_SYSTEM_PROMPT,
+                                          SLIDE_GENERATION_USER_TEMPLATE,
+                                          SLIDE_REFINEMENT_SYSTEM_PROMPT,
+                                          SLIDE_REFINEMENT_USER_TEMPLATE)
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +84,8 @@ def _settings_to_response(settings: LLMSettings) -> LLMSettingsOut:
         user_id=settings.user_id,
         provider=settings.provider,
         api_base_url=settings.api_base_url,
-        has_api_key=settings.api_key_encrypted is not None and len(settings.api_key_encrypted) > 0,
+        has_api_key=settings.api_key_encrypted is not None
+        and len(settings.api_key_encrypted) > 0,
         default_model=settings.default_model,
         embedding_model=settings.embedding_model,
         embedding_api_base=settings.embedding_api_base,
@@ -300,12 +285,14 @@ async def list_available_models(
                             if param_size:
                                 size = param_size
 
-                        models.append(ModelInfo(
-                            name=name,
-                            size=size,
-                            family=details.get("family"),
-                            modified_at=model_data.get("modified_at"),
-                        ))
+                        models.append(
+                            ModelInfo(
+                                name=name,
+                                size=size,
+                                family=details.get("family"),
+                                modified_at=model_data.get("modified_at"),
+                            )
+                        )
                     return ModelsListResponse(models=models, provider=settings.provider)
 
             else:
@@ -323,9 +310,11 @@ async def list_available_models(
                     data = response.json()
                     models = []
                     for model_data in data.get("data", []):
-                        models.append(ModelInfo(
-                            name=model_data.get("id", ""),
-                        ))
+                        models.append(
+                            ModelInfo(
+                                name=model_data.get("id", ""),
+                            )
+                        )
                     return ModelsListResponse(models=models, provider=settings.provider)
 
         raise HTTPException(
@@ -377,6 +366,7 @@ def get_default_settings(
 
     # Create a mock response
     from datetime import datetime
+
     return LLMSettingsOut(
         id=UUID("00000000-0000-0000-0000-000000000000"),
         user_id=None,
@@ -402,7 +392,9 @@ def reset_to_defaults(
     """
     Reset user's LLM settings to system defaults.
     """
-    settings = db.query(LLMSettings).filter(LLMSettings.user_id == current_user.id).first()
+    settings = (
+        db.query(LLMSettings).filter(LLMSettings.user_id == current_user.id).first()
+    )
 
     if settings:
         # Reset all fields to defaults

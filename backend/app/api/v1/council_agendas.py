@@ -3,35 +3,35 @@ Council agenda item management API endpoints.
 
 Provides CRUD operations for council agenda items (議題) with URL processing.
 """
+
 from typing import List, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, BackgroundTasks
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     Request, status)
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_council_access, parse_uuid
-from app.models.council_meeting import CouncilMeeting
+from app.celery_app.tasks.council import (enqueue_agenda_content_processing,
+                                          enqueue_agenda_summary_regeneration)
+from app.core.deps import (check_council_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.council_agenda_item import CouncilAgendaItem
 from app.models.council_agenda_material import CouncilAgendaMaterial
+from app.models.council_meeting import CouncilMeeting
 from app.models.user import User
-from app.schemas.council_agenda import (
-    CouncilAgendaCreate,
-    CouncilAgendaUpdate,
-    CouncilAgendaOut,
-    CouncilAgendaListItem,
-    CouncilAgendaDetailOut,
-    CouncilAgendaSummaryUpdate,
-    CouncilAgendaMaterialCreate,
-    CouncilAgendaMaterialUpdate,
-    CouncilAgendaMaterialOut,
-    CouncilAgendaMaterialDetailOut,
-    CouncilAgendaMaterialSummaryUpdate,
-)
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
-from app.celery_app.tasks.council import (
-    enqueue_agenda_content_processing,
-    enqueue_agenda_summary_regeneration,
-)
+from app.schemas.council_agenda import (CouncilAgendaCreate,
+                                        CouncilAgendaDetailOut,
+                                        CouncilAgendaListItem,
+                                        CouncilAgendaMaterialCreate,
+                                        CouncilAgendaMaterialDetailOut,
+                                        CouncilAgendaMaterialOut,
+                                        CouncilAgendaMaterialSummaryUpdate,
+                                        CouncilAgendaMaterialUpdate,
+                                        CouncilAgendaOut,
+                                        CouncilAgendaSummaryUpdate,
+                                        CouncilAgendaUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 router = APIRouter(prefix="/council-agendas", tags=["council-agendas"])
 
@@ -51,7 +51,9 @@ def _build_material_out(material: CouncilAgendaMaterial) -> CouncilAgendaMateria
     )
 
 
-def _build_material_detail_out(material: CouncilAgendaMaterial) -> CouncilAgendaMaterialDetailOut:
+def _build_material_detail_out(
+    material: CouncilAgendaMaterial,
+) -> CouncilAgendaMaterialDetailOut:
     """Build material detail output schema."""
     return CouncilAgendaMaterialDetailOut(
         id=material.id,
@@ -87,13 +89,17 @@ def _get_agenda_and_check_access(
     db: Session, agenda_id: UUID, current_user: User
 ) -> CouncilAgendaItem:
     """Get agenda and check access."""
-    agenda = db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    agenda = (
+        db.query(CouncilAgendaItem).filter(CouncilAgendaItem.id == agenda_id).first()
+    )
     if not agenda:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="議題が見つかりません",
         )
-    meeting = db.query(CouncilMeeting).filter(CouncilMeeting.id == agenda.meeting_id).first()
+    meeting = (
+        db.query(CouncilMeeting).filter(CouncilMeeting.id == agenda.meeting_id).first()
+    )
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -166,7 +172,11 @@ def get_agenda(
         has_materials_summary=bool(agenda.materials_summary),
         has_minutes_summary=bool(agenda.minutes_summary),
         materials_count=len(agenda.materials) if agenda.materials else 0,
-        materials=[_build_material_out(m) for m in agenda.materials] if agenda.materials else [],
+        materials=(
+            [_build_material_out(m) for m in agenda.materials]
+            if agenda.materials
+            else []
+        ),
         created_at=agenda.created_at,
         updated_at=agenda.updated_at,
     )
@@ -201,13 +211,21 @@ def get_agenda_detail(
         has_minutes_summary=bool(agenda.minutes_summary),
         processing_error=agenda.processing_error,
         materials_count=len(agenda.materials) if agenda.materials else 0,
-        materials=[_build_material_detail_out(m) for m in agenda.materials] if agenda.materials else [],
+        materials=(
+            [_build_material_detail_out(m) for m in agenda.materials]
+            if agenda.materials
+            else []
+        ),
         created_at=agenda.created_at,
         updated_at=agenda.updated_at,
     )
 
 
-@router.post("/meeting/{meeting_id}", response_model=CouncilAgendaOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/meeting/{meeting_id}",
+    response_model=CouncilAgendaOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_agenda(
     meeting_id: str,
     data: CouncilAgendaCreate,
@@ -226,10 +244,14 @@ async def create_agenda(
     meeting = _get_meeting_and_check_access(db, meeting_uuid, current_user)
 
     # Check if agenda number already exists for this meeting
-    existing = db.query(CouncilAgendaItem).filter(
-        CouncilAgendaItem.meeting_id == meeting_uuid,
-        CouncilAgendaItem.agenda_number == data.agenda_number,
-    ).first()
+    existing = (
+        db.query(CouncilAgendaItem)
+        .filter(
+            CouncilAgendaItem.meeting_id == meeting_uuid,
+            CouncilAgendaItem.agenda_number == data.agenda_number,
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -267,7 +289,9 @@ async def create_agenda(
             db.refresh(mat)
 
     # Trigger background processing if URLs are provided
-    has_materials_to_process = data.materials_url or (data.materials and len(data.materials) > 0)
+    has_materials_to_process = data.materials_url or (
+        data.materials and len(data.materials) > 0
+    )
     if has_materials_to_process or data.minutes_url:
         enqueue_agenda_content_processing(agenda.id)
 
@@ -329,11 +353,15 @@ async def update_agenda(
 
     if data.agenda_number is not None and data.agenda_number != agenda.agenda_number:
         # Check if new number already exists
-        existing = db.query(CouncilAgendaItem).filter(
-            CouncilAgendaItem.meeting_id == agenda.meeting_id,
-            CouncilAgendaItem.agenda_number == data.agenda_number,
-            CouncilAgendaItem.id != agenda.id,
-        ).first()
+        existing = (
+            db.query(CouncilAgendaItem)
+            .filter(
+                CouncilAgendaItem.meeting_id == agenda.meeting_id,
+                CouncilAgendaItem.agenda_number == data.agenda_number,
+                CouncilAgendaItem.id != agenda.id,
+            )
+            .first()
+        )
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -393,7 +421,11 @@ async def update_agenda(
         has_materials_summary=bool(agenda.materials_summary),
         has_minutes_summary=bool(agenda.minutes_summary),
         materials_count=len(agenda.materials) if agenda.materials else 0,
-        materials=[_build_material_out(m) for m in agenda.materials] if agenda.materials else [],
+        materials=(
+            [_build_material_out(m) for m in agenda.materials]
+            if agenda.materials
+            else []
+        ),
         created_at=agenda.created_at,
         updated_at=agenda.updated_at,
     )
@@ -414,7 +446,9 @@ def delete_agenda(
     agenda = _get_agenda_and_check_access(db, agenda_uuid, current_user)
 
     # Check council owner access
-    meeting = db.query(CouncilMeeting).filter(CouncilMeeting.id == agenda.meeting_id).first()
+    meeting = (
+        db.query(CouncilMeeting).filter(CouncilMeeting.id == agenda.meeting_id).first()
+    )
     check_council_access(db, meeting.council_id, current_user, require_owner=True)
 
     agenda_number = agenda.agenda_number
@@ -475,7 +509,11 @@ async def regenerate_agenda_summary(
             detail="議事録URLが登録されていません",
         )
 
-    if content_type == "both" and not can_regenerate_materials and not can_regenerate_minutes:
+    if (
+        content_type == "both"
+        and not can_regenerate_materials
+        and not can_regenerate_minutes
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="資料または議事録URLが登録されていません",
@@ -513,7 +551,11 @@ async def regenerate_agenda_summary(
         has_materials_summary=bool(agenda.materials_summary),
         has_minutes_summary=bool(agenda.minutes_summary),
         materials_count=len(agenda.materials) if agenda.materials else 0,
-        materials=[_build_material_out(m) for m in agenda.materials] if agenda.materials else [],
+        materials=(
+            [_build_material_out(m) for m in agenda.materials]
+            if agenda.materials
+            else []
+        ),
         created_at=agenda.created_at,
         updated_at=agenda.updated_at,
     )
@@ -571,7 +613,11 @@ def update_agenda_summary(
         has_materials_summary=bool(agenda.materials_summary),
         has_minutes_summary=bool(agenda.minutes_summary),
         materials_count=len(agenda.materials) if agenda.materials else 0,
-        materials=[_build_material_out(m) for m in agenda.materials] if agenda.materials else [],
+        materials=(
+            [_build_material_out(m) for m in agenda.materials]
+            if agenda.materials
+            else []
+        ),
         created_at=agenda.created_at,
         updated_at=agenda.updated_at,
     )
@@ -594,10 +640,16 @@ def list_agenda_materials(
     agenda_uuid = parse_uuid(agenda_id, "agenda ID")
     agenda = _get_agenda_and_check_access(db, agenda_uuid, current_user)
 
-    return [_build_material_out(m) for m in agenda.materials] if agenda.materials else []
+    return (
+        [_build_material_out(m) for m in agenda.materials] if agenda.materials else []
+    )
 
 
-@router.post("/{agenda_id}/materials", response_model=CouncilAgendaMaterialOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{agenda_id}/materials",
+    response_model=CouncilAgendaMaterialOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_agenda_material(
     agenda_id: str,
     data: CouncilAgendaMaterialCreate,
@@ -614,10 +666,14 @@ async def create_agenda_material(
     agenda = _get_agenda_and_check_access(db, agenda_uuid, current_user)
 
     # Check if material number already exists for this agenda
-    existing = db.query(CouncilAgendaMaterial).filter(
-        CouncilAgendaMaterial.agenda_id == agenda_uuid,
-        CouncilAgendaMaterial.material_number == data.material_number,
-    ).first()
+    existing = (
+        db.query(CouncilAgendaMaterial)
+        .filter(
+            CouncilAgendaMaterial.agenda_id == agenda_uuid,
+            CouncilAgendaMaterial.material_number == data.material_number,
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -657,7 +713,10 @@ async def create_agenda_material(
     return _build_material_out(material)
 
 
-@router.get("/{agenda_id}/materials/{material_id}", response_model=CouncilAgendaMaterialDetailOut)
+@router.get(
+    "/{agenda_id}/materials/{material_id}",
+    response_model=CouncilAgendaMaterialDetailOut,
+)
 def get_agenda_material(
     agenda_id: str,
     material_id: str,
@@ -671,10 +730,14 @@ def get_agenda_material(
     material_uuid = parse_uuid(material_id, "material ID")
     _get_agenda_and_check_access(db, agenda_uuid, current_user)
 
-    material = db.query(CouncilAgendaMaterial).filter(
-        CouncilAgendaMaterial.id == material_uuid,
-        CouncilAgendaMaterial.agenda_id == agenda_uuid,
-    ).first()
+    material = (
+        db.query(CouncilAgendaMaterial)
+        .filter(
+            CouncilAgendaMaterial.id == material_uuid,
+            CouncilAgendaMaterial.agenda_id == agenda_uuid,
+        )
+        .first()
+    )
     if not material:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -684,7 +747,9 @@ def get_agenda_material(
     return _build_material_detail_out(material)
 
 
-@router.patch("/{agenda_id}/materials/{material_id}", response_model=CouncilAgendaMaterialOut)
+@router.patch(
+    "/{agenda_id}/materials/{material_id}", response_model=CouncilAgendaMaterialOut
+)
 async def update_agenda_material(
     agenda_id: str,
     material_id: str,
@@ -702,10 +767,14 @@ async def update_agenda_material(
     material_uuid = parse_uuid(material_id, "material ID")
     agenda = _get_agenda_and_check_access(db, agenda_uuid, current_user)
 
-    material = db.query(CouncilAgendaMaterial).filter(
-        CouncilAgendaMaterial.id == material_uuid,
-        CouncilAgendaMaterial.agenda_id == agenda_uuid,
-    ).first()
+    material = (
+        db.query(CouncilAgendaMaterial)
+        .filter(
+            CouncilAgendaMaterial.id == material_uuid,
+            CouncilAgendaMaterial.agenda_id == agenda_uuid,
+        )
+        .first()
+    )
     if not material:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -715,13 +784,20 @@ async def update_agenda_material(
     update_details = {}
     url_changed = False
 
-    if data.material_number is not None and data.material_number != material.material_number:
+    if (
+        data.material_number is not None
+        and data.material_number != material.material_number
+    ):
         # Check if new number already exists
-        existing = db.query(CouncilAgendaMaterial).filter(
-            CouncilAgendaMaterial.agenda_id == agenda_uuid,
-            CouncilAgendaMaterial.material_number == data.material_number,
-            CouncilAgendaMaterial.id != material.id,
-        ).first()
+        existing = (
+            db.query(CouncilAgendaMaterial)
+            .filter(
+                CouncilAgendaMaterial.agenda_id == agenda_uuid,
+                CouncilAgendaMaterial.material_number == data.material_number,
+                CouncilAgendaMaterial.id != material.id,
+            )
+            .first()
+        )
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -764,7 +840,9 @@ async def update_agenda_material(
     return _build_material_out(material)
 
 
-@router.delete("/{agenda_id}/materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{agenda_id}/materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 def delete_agenda_material(
     agenda_id: str,
     material_id: str,
@@ -781,13 +859,19 @@ def delete_agenda_material(
 
     # Check council owner access
     agenda = _get_agenda_and_check_access(db, agenda_uuid, current_user)
-    meeting = db.query(CouncilMeeting).filter(CouncilMeeting.id == agenda.meeting_id).first()
+    meeting = (
+        db.query(CouncilMeeting).filter(CouncilMeeting.id == agenda.meeting_id).first()
+    )
     check_council_access(db, meeting.council_id, current_user, require_owner=True)
 
-    material = db.query(CouncilAgendaMaterial).filter(
-        CouncilAgendaMaterial.id == material_uuid,
-        CouncilAgendaMaterial.agenda_id == agenda_uuid,
-    ).first()
+    material = (
+        db.query(CouncilAgendaMaterial)
+        .filter(
+            CouncilAgendaMaterial.id == material_uuid,
+            CouncilAgendaMaterial.agenda_id == agenda_uuid,
+        )
+        .first()
+    )
     if not material:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -817,7 +901,10 @@ def delete_agenda_material(
     return None
 
 
-@router.patch("/{agenda_id}/materials/{material_id}/summary", response_model=CouncilAgendaMaterialOut)
+@router.patch(
+    "/{agenda_id}/materials/{material_id}/summary",
+    response_model=CouncilAgendaMaterialOut,
+)
 def update_material_summary(
     agenda_id: str,
     material_id: str,
@@ -834,10 +921,14 @@ def update_material_summary(
     material_uuid = parse_uuid(material_id, "material ID")
     _get_agenda_and_check_access(db, agenda_uuid, current_user)
 
-    material = db.query(CouncilAgendaMaterial).filter(
-        CouncilAgendaMaterial.id == material_uuid,
-        CouncilAgendaMaterial.agenda_id == agenda_uuid,
-    ).first()
+    material = (
+        db.query(CouncilAgendaMaterial)
+        .filter(
+            CouncilAgendaMaterial.id == material_uuid,
+            CouncilAgendaMaterial.agenda_id == agenda_uuid,
+        )
+        .first()
+    )
     if not material:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

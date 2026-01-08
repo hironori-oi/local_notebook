@@ -5,7 +5,6 @@ from typing import Literal, Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
-
 # Insecure default values that should never be used in production
 INSECURE_JWT_SECRETS = {
     "CHANGE_ME_TO_RANDOM_SECRET_KEY",
@@ -148,10 +147,11 @@ class Settings(BaseSettings):
         if v in INSECURE_JWT_SECRETS:
             # In development, generate a random key with warning
             import os
+
             if os.getenv("ENV", "development") == "production":
                 raise ValueError(
                     "JWT_SECRET_KEY must be set to a secure random value in production. "
-                    "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                    'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
                 )
             # Development mode: generate temporary key with warning
             warnings.warn(
@@ -163,7 +163,7 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError(
                 "JWT_SECRET_KEY must be at least 32 characters long for security. "
-                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return v
 

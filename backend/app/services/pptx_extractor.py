@@ -3,9 +3,10 @@ PowerPoint text extraction service.
 
 This module provides functions to extract text content from PowerPoint files (.pptx).
 """
+
 import io
 import logging
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 from pptx import Presentation
 from pptx.util import Inches
@@ -67,11 +68,13 @@ def extract_text_from_pptx(content: bytes) -> tuple[str, List[Dict]]:
 
         slide_text = "\n".join(slide_texts)
 
-        slides_data.append({
-            "slide": slide_num,
-            "text": slide_text,
-            "notes": notes_text,
-        })
+        slides_data.append(
+            {
+                "slide": slide_num,
+                "text": slide_text,
+                "notes": notes_text,
+            }
+        )
 
         # Build full text with slide markers
         full_text_parts.append(f"[スライド {slide_num}]")
@@ -84,7 +87,9 @@ def extract_text_from_pptx(content: bytes) -> tuple[str, List[Dict]]:
     full_text = "\n".join(full_text_parts)
     page_count = len(prs.slides)
 
-    logger.info(f"Extracted text from {page_count} slides, total {len(full_text)} chars")
+    logger.info(
+        f"Extracted text from {page_count} slides, total {len(full_text)} chars"
+    )
 
     return full_text, slides_data
 

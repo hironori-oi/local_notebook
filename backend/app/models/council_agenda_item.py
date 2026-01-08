@@ -1,9 +1,11 @@
 """CouncilAgendaItem model for managing agenda items within a council meeting."""
+
 import uuid
-from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -16,6 +18,7 @@ class CouncilAgendaItem(Base):
     along with their processed text and LLM-generated summaries.
     Multiple agenda items can exist for one meeting.
     """
+
     __tablename__ = "council_agenda_items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -41,12 +44,8 @@ class CouncilAgendaItem(Base):
     minutes_summary = Column(Text, nullable=True)  # 議事録要約
 
     # Processing status tracking (pending/processing/completed/failed)
-    materials_processing_status = Column(
-        String(20), nullable=False, default="pending"
-    )
-    minutes_processing_status = Column(
-        String(20), nullable=False, default="pending"
-    )
+    materials_processing_status = Column(String(20), nullable=False, default="pending")
+    minutes_processing_status = Column(String(20), nullable=False, default="pending")
     processing_error = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

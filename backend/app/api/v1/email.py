@@ -1,25 +1,24 @@
 """
 Email API endpoints for generating and managing email content.
 """
+
 from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access, parse_uuid
-from app.models.notebook import Notebook
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.generated_email import GeneratedEmail
+from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.email import (
-    EmailGenerateRequest,
-    EmailGenerateResponse,
-    GeneratedEmailCreate,
-    GeneratedEmailUpdate,
-    GeneratedEmailOut,
-)
+from app.schemas.email import (EmailGenerateRequest, EmailGenerateResponse,
+                               GeneratedEmailCreate, GeneratedEmailOut,
+                               GeneratedEmailUpdate)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.email_generator import generate_email_content
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
@@ -76,7 +75,11 @@ async def generate_email(
     return result
 
 
-@router.post("/{notebook_id}", response_model=GeneratedEmailOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{notebook_id}",
+    response_model=GeneratedEmailOut,
+    status_code=status.HTTP_201_CREATED,
+)
 def save_email(
     notebook_id: str,
     data: GeneratedEmailCreate,
@@ -100,8 +103,12 @@ def save_email(
         title=data.title,
         topic=data.topic,
         email_body=data.email_body,
-        structured_content=data.structured_content.model_dump() if data.structured_content else None,
-        document_source_ids=data.document_source_ids if data.document_source_ids else None,
+        structured_content=(
+            data.structured_content.model_dump() if data.structured_content else None
+        ),
+        document_source_ids=(
+            data.document_source_ids if data.document_source_ids else None
+        ),
         minute_ids=data.minute_ids if data.minute_ids else None,
     )
     db.add(email)
@@ -135,10 +142,15 @@ def list_emails(
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
     _verify_notebook_access(db, nb_uuid, current_user)
 
-    emails = db.query(GeneratedEmail).filter(
-        GeneratedEmail.notebook_id == nb_uuid,
-        GeneratedEmail.created_by == current_user.id,
-    ).order_by(GeneratedEmail.created_at.desc()).all()
+    emails = (
+        db.query(GeneratedEmail)
+        .filter(
+            GeneratedEmail.notebook_id == nb_uuid,
+            GeneratedEmail.created_by == current_user.id,
+        )
+        .order_by(GeneratedEmail.created_at.desc())
+        .all()
+    )
 
     return emails
 
@@ -154,10 +166,14 @@ def get_email(
     """
     email_uuid = parse_uuid(email_id, "Email ID")
 
-    email = db.query(GeneratedEmail).filter(
-        GeneratedEmail.id == email_uuid,
-        GeneratedEmail.created_by == current_user.id,
-    ).first()
+    email = (
+        db.query(GeneratedEmail)
+        .filter(
+            GeneratedEmail.id == email_uuid,
+            GeneratedEmail.created_by == current_user.id,
+        )
+        .first()
+    )
 
     if not email:
         raise HTTPException(
@@ -180,10 +196,14 @@ def update_email(
     """
     email_uuid = parse_uuid(email_id, "Email ID")
 
-    email = db.query(GeneratedEmail).filter(
-        GeneratedEmail.id == email_uuid,
-        GeneratedEmail.created_by == current_user.id,
-    ).first()
+    email = (
+        db.query(GeneratedEmail)
+        .filter(
+            GeneratedEmail.id == email_uuid,
+            GeneratedEmail.created_by == current_user.id,
+        )
+        .first()
+    )
 
     if not email:
         raise HTTPException(
@@ -215,10 +235,14 @@ def delete_email(
     ip_address, user_agent = get_client_info(request)
     email_uuid = parse_uuid(email_id, "Email ID")
 
-    email = db.query(GeneratedEmail).filter(
-        GeneratedEmail.id == email_uuid,
-        GeneratedEmail.created_by == current_user.id,
-    ).first()
+    email = (
+        db.query(GeneratedEmail)
+        .filter(
+            GeneratedEmail.id == email_uuid,
+            GeneratedEmail.created_by == current_user.id,
+        )
+        .first()
+    )
 
     if not email:
         raise HTTPException(

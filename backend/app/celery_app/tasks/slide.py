@@ -6,14 +6,14 @@ This module provides tasks for:
 - Refining slides based on user instructions
 """
 
-import logging
 import asyncio
+import logging
 from uuid import UUID
 
 from celery import shared_task
 
-from app.celery_app.tasks.base import DatabaseTask
 from app.celery_app.config import RETRY_CONFIG, RETRYABLE_EXCEPTIONS
+from app.celery_app.tasks.base import DatabaseTask
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,9 @@ def process_slide_generation_task(self, project_id: str):
     db = self.db
 
     try:
-        project = db.query(SlideProject).filter(
-            SlideProject.id == UUID(project_id)
-        ).first()
+        project = (
+            db.query(SlideProject).filter(SlideProject.id == UUID(project_id)).first()
+        )
         if not project:
             logger.error(f"Slide project not found: {project_id}")
             return {"status": "error", "message": "Slide project not found"}
@@ -54,9 +54,7 @@ def process_slide_generation_task(self, project_id: str):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(
-                process_slide_generation(db, UUID(project_id))
-            )
+            loop.run_until_complete(process_slide_generation(db, UUID(project_id)))
         finally:
             loop.close()
 
@@ -81,9 +79,9 @@ def _mark_project_failed(db, project_id: str, error_message: str):
     from app.models.slide_project import SlideProject
 
     try:
-        project = db.query(SlideProject).filter(
-            SlideProject.id == UUID(project_id)
-        ).first()
+        project = (
+            db.query(SlideProject).filter(SlideProject.id == UUID(project_id)).first()
+        )
         if project:
             project.status = "failed"
             project.error_message = error_message

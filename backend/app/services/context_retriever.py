@@ -5,22 +5,23 @@ This module provides context retrieval functionality that can be used by
 infographic and slide generation services without the side effects of
 message storage that occur in the main RAG flow.
 """
+
 import logging
 from dataclasses import dataclass
 from typing import List, Optional
 from uuid import UUID
 
+from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.orm import Session
-from sqlalchemy import select, text, func, bindparam
 from sqlalchemy.types import String
 
-from app.services.embedding import embed_texts
-from app.models.source import Source
-from app.models.minute import Minute
+from app.core.config import settings
+from app.core.exceptions import BadRequestError, EmbeddingError
 from app.models.council_agenda_item import CouncilAgendaItem
 from app.models.council_meeting import CouncilMeeting
-from app.core.exceptions import BadRequestError, EmbeddingError
-from app.core.config import settings
+from app.models.minute import Minute
+from app.models.source import Source
+from app.services.embedding import embed_texts
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ContextResult:
     """Result of context retrieval containing document chunks and references."""
+
     contexts: List[str]  # Retrieved text chunks
     source_refs: List[str]  # Source references ("Title(p.X)" format)
 
@@ -68,8 +70,7 @@ async def retrieve_context(
         # SECURITY: Validate all source_ids belong to the specified notebook
         valid_count = db.execute(
             select(func.count(Source.id)).where(
-                Source.id.in_(source_ids),
-                Source.notebook_id == notebook_id
+                Source.id.in_(source_ids), Source.notebook_id == notebook_id
             )
         ).scalar()
 
@@ -83,9 +84,7 @@ async def retrieve_context(
         target_source_ids = source_ids
     else:
         # Get all sources in the notebook
-        rows = db.execute(
-            select(Source.id).where(Source.notebook_id == notebook_id)
-        )
+        rows = db.execute(select(Source.id).where(Source.notebook_id == notebook_id))
         target_source_ids = [row[0] for row in rows]
 
     if not target_source_ids:
@@ -190,8 +189,7 @@ async def retrieve_minute_context(
     # 1. Validate minute_ids belong to the notebook
     valid_count = db.execute(
         select(func.count(Minute.id)).where(
-            Minute.id.in_(minute_ids),
-            Minute.notebook_id == notebook_id
+            Minute.id.in_(minute_ids), Minute.notebook_id == notebook_id
         )
     ).scalar()
 
@@ -252,6 +250,7 @@ async def retrieve_minute_context(
 @dataclass
 class SummaryResult:
     """Result of summary retrieval for email generation."""
+
     document_summaries: List[str]  # Summaries from sources
     document_refs: List[str]  # Source references
     minute_summaries: List[str]  # Summaries from minutes
@@ -303,10 +302,11 @@ async def retrieve_summaries_for_email(
     # 1. Get source summaries
     if source_ids:
         # Validate source_ids belong to the notebook
-        sources = db.query(Source).filter(
-            Source.id.in_(source_ids),
-            Source.notebook_id == notebook_id
-        ).all()
+        sources = (
+            db.query(Source)
+            .filter(Source.id.in_(source_ids), Source.notebook_id == notebook_id)
+            .all()
+        )
 
         if len(sources) != len(source_ids):
             logger.warning(
@@ -344,10 +344,11 @@ async def retrieve_summaries_for_email(
     # 2. Get minute summaries
     if minute_ids:
         # Validate minute_ids belong to the notebook
-        minutes = db.query(Minute).filter(
-            Minute.id.in_(minute_ids),
-            Minute.notebook_id == notebook_id
-        ).all()
+        minutes = (
+            db.query(Minute)
+            .filter(Minute.id.in_(minute_ids), Minute.notebook_id == notebook_id)
+            .all()
+        )
 
         if len(minutes) != len(minute_ids):
             logger.warning(
@@ -409,13 +410,17 @@ def format_summaries_for_prompt(summary_result: SummaryResult) -> tuple[str, str
     """
     # Format document summaries
     doc_parts = []
-    for summary, ref in zip(summary_result.document_summaries, summary_result.document_refs):
+    for summary, ref in zip(
+        summary_result.document_summaries, summary_result.document_refs
+    ):
         doc_parts.append(f"【{ref}】\n{summary}")
     document_context = "\n\n---\n\n".join(doc_parts) if doc_parts else ""
 
     # Format minute summaries
     minute_parts = []
-    for summary, ref in zip(summary_result.minute_summaries, summary_result.minute_refs):
+    for summary, ref in zip(
+        summary_result.minute_summaries, summary_result.minute_refs
+    ):
         minute_parts.append(f"【{ref}】\n{summary}")
     minute_context = "\n\n---\n\n".join(minute_parts) if minute_parts else ""
 
@@ -425,6 +430,7 @@ def format_summaries_for_prompt(summary_result: SummaryResult) -> tuple[str, str
 # =============================================================================
 # Council Context Retrieval
 # =============================================================================
+
 
 async def retrieve_council_context(
     db: Session,
@@ -461,7 +467,7 @@ async def retrieve_council_context(
         valid_count = db.execute(
             select(func.count(CouncilAgendaItem.id)).where(
                 CouncilAgendaItem.id.in_(agenda_ids),
-                CouncilAgendaItem.meeting_id == meeting_id
+                CouncilAgendaItem.meeting_id == meeting_id,
             )
         ).scalar()
 
@@ -469,9 +475,7 @@ async def retrieve_council_context(
             logger.warning(
                 f"User {user_id} attempted to access agendas not belonging to meeting {meeting_id}"
             )
-            raise BadRequestError(
-                "指定された議題IDの一部がこの開催回に存在しません"
-            )
+            raise BadRequestError("指定された議題IDの一部がこの開催回に存在しません")
         target_agenda_ids = agenda_ids
     else:
         # Get all agendas in the meeting that have been processed
@@ -479,9 +483,9 @@ async def retrieve_council_context(
             select(CouncilAgendaItem.id).where(
                 CouncilAgendaItem.meeting_id == meeting_id,
                 (
-                    (CouncilAgendaItem.materials_processing_status == "completed") |
-                    (CouncilAgendaItem.minutes_processing_status == "completed")
-                )
+                    (CouncilAgendaItem.materials_processing_status == "completed")
+                    | (CouncilAgendaItem.minutes_processing_status == "completed")
+                ),
             )
         )
         target_agenda_ids = [row[0] for row in rows]

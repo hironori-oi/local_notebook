@@ -1,14 +1,16 @@
 """MinuteDocument model for linking minutes to source documents."""
+
 from sqlalchemy import Column, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
 
 class MinuteDocument(Base):
     """Junction table linking minutes to source documents."""
+
     __tablename__ = "minute_documents"
 
     minute_id = Column(

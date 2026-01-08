@@ -1,13 +1,14 @@
 """
 Tests for notes endpoints.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.models.message import Message
 from app.models.note import Note
 from app.models.notebook import Notebook
-from app.models.message import Message
 
 
 class TestListNotes:
@@ -147,9 +148,7 @@ class TestCreateNote:
 class TestGetNote:
     """Tests for getting a single note."""
 
-    def test_get_note_success(
-        self, authenticated_client: TestClient, test_note: Note
-    ):
+    def test_get_note_success(self, authenticated_client: TestClient, test_note: Note):
         """Test getting an existing note."""
         response = authenticated_client.get(f"/api/v1/notes/{test_note.id}")
         assert response.status_code == 200
@@ -172,9 +171,7 @@ class TestGetNote:
 class TestUpdateNote:
     """Tests for updating notes."""
 
-    def test_update_note_title(
-        self, authenticated_client: TestClient, test_note: Note
-    ):
+    def test_update_note_title(self, authenticated_client: TestClient, test_note: Note):
         """Test updating note title."""
         response = authenticated_client.patch(
             f"/api/v1/notes/{test_note.id}",

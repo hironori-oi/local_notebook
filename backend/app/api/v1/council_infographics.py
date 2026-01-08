@@ -1,26 +1,27 @@
 """
 Council Infographic API endpoints for generating and managing council infographics.
 """
+
 from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, parse_uuid
+from app.core.deps import get_current_user, get_db, parse_uuid
 from app.models.council import Council
-from app.models.council_meeting import CouncilMeeting
 from app.models.council_infographic import CouncilInfographic
+from app.models.council_meeting import CouncilMeeting
 from app.models.user import User
-from app.schemas.council_infographic import (
-    CouncilInfographicCreateRequest,
-    CouncilInfographicResponse,
-    CouncilInfographicListItem,
-    CouncilInfographicListResponse,
-)
+from app.schemas.council_infographic import (CouncilInfographicCreateRequest,
+                                             CouncilInfographicListItem,
+                                             CouncilInfographicListResponse,
+                                             CouncilInfographicResponse)
 from app.schemas.infographic import InfographicStructure
-from app.services.council_infographic_planner import generate_council_infographic_structure
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
+from app.services.council_infographic_planner import \
+    generate_council_infographic_structure
 
 router = APIRouter(prefix="/council-infographics", tags=["council-infographics"])
 
@@ -36,12 +37,18 @@ def _verify_council_access(db: Session, council_id: UUID, user: User) -> Council
     return council
 
 
-def _verify_meeting_access(db: Session, meeting_id: UUID, council_id: UUID) -> CouncilMeeting:
+def _verify_meeting_access(
+    db: Session, meeting_id: UUID, council_id: UUID
+) -> CouncilMeeting:
     """Verify that the meeting exists and belongs to the council."""
-    meeting = db.query(CouncilMeeting).filter(
-        CouncilMeeting.id == meeting_id,
-        CouncilMeeting.council_id == council_id,
-    ).first()
+    meeting = (
+        db.query(CouncilMeeting)
+        .filter(
+            CouncilMeeting.id == meeting_id,
+            CouncilMeeting.council_id == council_id,
+        )
+        .first()
+    )
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -50,7 +57,11 @@ def _verify_meeting_access(db: Session, meeting_id: UUID, council_id: UUID) -> C
     return meeting
 
 
-@router.post("/{council_id}/meeting/{meeting_id}", response_model=CouncilInfographicResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{council_id}/meeting/{meeting_id}",
+    response_model=CouncilInfographicResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_council_infographic(
     council_id: str,
     meeting_id: str,
@@ -106,7 +117,12 @@ async def create_council_infographic(
         user_id=current_user.id,
         target_type=TargetType.INFOGRAPHIC,
         target_id=str(infographic.id),
-        details={"title": infographic.title, "topic": data.topic, "council_id": council_id, "meeting_id": meeting_id},
+        details={
+            "title": infographic.title,
+            "topic": data.topic,
+            "council_id": council_id,
+            "meeting_id": meeting_id,
+        },
         ip_address=ip_address,
         user_agent=user_agent,
     )
@@ -124,7 +140,9 @@ async def create_council_infographic(
     )
 
 
-@router.get("/{council_id}/meeting/{meeting_id}", response_model=CouncilInfographicListResponse)
+@router.get(
+    "/{council_id}/meeting/{meeting_id}", response_model=CouncilInfographicListResponse
+)
 def list_council_infographics(
     council_id: str,
     meeting_id: str,
@@ -140,10 +158,15 @@ def list_council_infographics(
     _verify_council_access(db, council_uuid, current_user)
     _verify_meeting_access(db, meeting_uuid, council_uuid)
 
-    infographics = db.query(CouncilInfographic).filter(
-        CouncilInfographic.meeting_id == meeting_uuid,
-        CouncilInfographic.created_by == current_user.id,
-    ).order_by(CouncilInfographic.created_at.desc()).all()
+    infographics = (
+        db.query(CouncilInfographic)
+        .filter(
+            CouncilInfographic.meeting_id == meeting_uuid,
+            CouncilInfographic.created_by == current_user.id,
+        )
+        .order_by(CouncilInfographic.created_at.desc())
+        .all()
+    )
 
     items = [
         CouncilInfographicListItem(
@@ -172,10 +195,14 @@ def get_council_infographic(
     """
     inf_uuid = parse_uuid(infographic_id, "Infographic ID")
 
-    infographic = db.query(CouncilInfographic).filter(
-        CouncilInfographic.id == inf_uuid,
-        CouncilInfographic.created_by == current_user.id,
-    ).first()
+    infographic = (
+        db.query(CouncilInfographic)
+        .filter(
+            CouncilInfographic.id == inf_uuid,
+            CouncilInfographic.created_by == current_user.id,
+        )
+        .first()
+    )
 
     if not infographic:
         raise HTTPException(
@@ -209,10 +236,14 @@ def delete_council_infographic(
     ip_address, user_agent = get_client_info(request)
     inf_uuid = parse_uuid(infographic_id, "Infographic ID")
 
-    infographic = db.query(CouncilInfographic).filter(
-        CouncilInfographic.id == inf_uuid,
-        CouncilInfographic.created_by == current_user.id,
-    ).first()
+    infographic = (
+        db.query(CouncilInfographic)
+        .filter(
+            CouncilInfographic.id == inf_uuid,
+            CouncilInfographic.created_by == current_user.id,
+        )
+        .first()
+    )
 
     if not infographic:
         raise HTTPException(

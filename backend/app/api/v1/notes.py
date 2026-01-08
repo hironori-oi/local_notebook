@@ -1,19 +1,20 @@
 """
 Notes API endpoints.
 """
+
+import json
 from typing import List
 from uuid import UUID
-import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_notebook_access
-from app.models.notebook import Notebook
-from app.models.note import Note
+from app.core.deps import check_notebook_access, get_current_user, get_db
 from app.models.message import Message
+from app.models.note import Note
+from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.note import NoteCreate, NoteUpdate, NoteOut, NoteListResponse
+from app.schemas.note import NoteCreate, NoteListResponse, NoteOut, NoteUpdate
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -21,18 +22,21 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 def _get_note_with_messages(db: Session, note: Note) -> NoteOut:
     """Helper to build NoteOut with associated message content."""
     # Get the assistant message
-    assistant_msg = db.query(Message).filter(
-        Message.id == note.message_id
-    ).first()
+    assistant_msg = db.query(Message).filter(Message.id == note.message_id).first()
 
     # Try to find the preceding user message
     user_msg = None
     if assistant_msg:
-        user_msg = db.query(Message).filter(
-            Message.notebook_id == assistant_msg.notebook_id,
-            Message.role == "user",
-            Message.created_at < assistant_msg.created_at,
-        ).order_by(Message.created_at.desc()).first()
+        user_msg = (
+            db.query(Message)
+            .filter(
+                Message.notebook_id == assistant_msg.notebook_id,
+                Message.role == "user",
+                Message.created_at < assistant_msg.created_at,
+            )
+            .order_by(Message.created_at.desc())
+            .first()
+        )
 
     source_refs = None
     if assistant_msg and assistant_msg.source_refs:
@@ -81,9 +85,14 @@ def list_notes(
     # Get total count
     total = db.query(Note).filter(Note.notebook_id == nb_uuid).count()
 
-    notes = db.query(Note).filter(
-        Note.notebook_id == nb_uuid
-    ).order_by(Note.created_at.desc()).offset(offset).limit(limit).all()
+    notes = (
+        db.query(Note)
+        .filter(Note.notebook_id == nb_uuid)
+        .order_by(Note.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
     if not notes:
         return NoteListResponse(items=[], total=total, offset=offset, limit=limit)
@@ -95,10 +104,12 @@ def list_notes(
 
     # Batch fetch user messages (preceding messages)
     # Get all messages from this notebook to find user messages
-    all_notebook_messages = db.query(Message).filter(
-        Message.notebook_id == nb_uuid,
-        Message.role == "user"
-    ).order_by(Message.created_at.desc()).all()
+    all_notebook_messages = (
+        db.query(Message)
+        .filter(Message.notebook_id == nb_uuid, Message.role == "user")
+        .order_by(Message.created_at.desc())
+        .all()
+    )
 
     # Build result efficiently
     items = []
@@ -120,19 +131,21 @@ def list_notes(
             except json.JSONDecodeError:
                 source_refs = []
 
-        items.append(NoteOut(
-            id=str(note.id),
-            notebook_id=str(note.notebook_id),
-            message_id=str(note.message_id),
-            title=note.title,
-            content=note.content,
-            created_by=str(note.created_by),
-            created_at=note.created_at.isoformat(),
-            updated_at=note.updated_at.isoformat() if note.updated_at else None,
-            question=user_msg.content if user_msg else None,
-            answer=assistant_msg.content if assistant_msg else None,
-            source_refs=source_refs,
-        ))
+        items.append(
+            NoteOut(
+                id=str(note.id),
+                notebook_id=str(note.notebook_id),
+                message_id=str(note.message_id),
+                title=note.title,
+                content=note.content,
+                created_by=str(note.created_by),
+                created_at=note.created_at.isoformat(),
+                updated_at=note.updated_at.isoformat() if note.updated_at else None,
+                question=user_msg.content if user_msg else None,
+                answer=assistant_msg.content if assistant_msg else None,
+                source_refs=source_refs,
+            )
+        )
 
     return NoteListResponse(
         items=items,
@@ -142,7 +155,9 @@ def list_notes(
     )
 
 
-@router.post("/{notebook_id}", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{notebook_id}", response_model=NoteOut, status_code=status.HTTP_201_CREATED
+)
 def create_note(
     notebook_id: str,
     data: NoteCreate,
@@ -165,11 +180,15 @@ def create_note(
     check_notebook_access(db, nb_uuid, current_user)
 
     # Verify message exists and belongs to this notebook
-    message = db.query(Message).filter(
-        Message.id == msg_uuid,
-        Message.notebook_id == nb_uuid,
-        Message.role == "assistant",
-    ).first()
+    message = (
+        db.query(Message)
+        .filter(
+            Message.id == msg_uuid,
+            Message.notebook_id == nb_uuid,
+            Message.role == "assistant",
+        )
+        .first()
+    )
 
     if not message:
         raise HTTPException(
@@ -178,9 +197,7 @@ def create_note(
         )
 
     # Check if note already exists for this message
-    existing_note = db.query(Note).filter(
-        Note.message_id == msg_uuid
-    ).first()
+    existing_note = db.query(Note).filter(Note.message_id == msg_uuid).first()
 
     if existing_note:
         raise HTTPException(

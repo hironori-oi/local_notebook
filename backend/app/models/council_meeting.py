@@ -1,9 +1,11 @@
 """CouncilMeeting model for managing council meeting sessions (開催回)."""
+
 import uuid
-from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -15,6 +17,7 @@ class CouncilMeeting(Base):
     Each meeting can have multiple agenda items (議題), where each agenda item
     has its own materials (資料) and minutes (議事録).
     """
+
     __tablename__ = "council_meetings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

@@ -3,11 +3,13 @@ Message model for storing chat messages.
 
 Messages are now associated with a ChatSession for context management.
 """
+
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text
+
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -19,6 +21,7 @@ class Message(Base):
     Messages belong to a ChatSession and maintain the conversation history
     that can be sent to the LLM for context-aware responses.
     """
+
     __tablename__ = "messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -28,7 +31,7 @@ class Message(Base):
         UUID(as_uuid=True),
         ForeignKey("chat_sessions.id", ondelete="CASCADE"),
         nullable=True,  # Nullable for backward compatibility with existing data
-        index=True
+        index=True,
     )
 
     # Keep notebook_id for backward compatibility and easier queries
@@ -36,13 +39,11 @@ class Message(Base):
         UUID(as_uuid=True),
         ForeignKey("notebooks.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     user_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     # "user" or "assistant"

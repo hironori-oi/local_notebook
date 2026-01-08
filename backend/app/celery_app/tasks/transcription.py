@@ -8,15 +8,15 @@ This module provides tasks for:
 - Formatting text with LLM
 """
 
-import logging
 import asyncio
+import logging
 from uuid import UUID
 
 from celery import shared_task
 from celery.exceptions import MaxRetriesExceededError
 
-from app.celery_app.tasks.base import DatabaseTask
 from app.celery_app.config import RETRY_CONFIG, RETRYABLE_EXCEPTIONS
+from app.celery_app.tasks.base import DatabaseTask
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +43,9 @@ def process_transcription_task(self, transcription_id: str):
         transcription_id: UUID string of the transcription record
     """
     from app.models.transcription import Transcription
-    from app.services.youtube_transcriber import (
-        download_youtube_audio,
-        transcribe_audio,
-        format_transcript_with_llm,
-    )
+    from app.services.youtube_transcriber import (download_youtube_audio,
+                                                  format_transcript_with_llm,
+                                                  transcribe_audio)
 
     logger.info(f"Processing transcription task: {transcription_id}")
 
@@ -57,9 +55,11 @@ def process_transcription_task(self, transcription_id: str):
 
     try:
         # Get transcription record
-        transcription = db.query(Transcription).filter(
-            Transcription.id == UUID(transcription_id)
-        ).first()
+        transcription = (
+            db.query(Transcription)
+            .filter(Transcription.id == UUID(transcription_id))
+            .first()
+        )
 
         if not transcription:
             logger.error(f"Transcription not found: {transcription_id}")
@@ -122,8 +122,9 @@ def process_transcription_task(self, transcription_id: str):
     except MaxRetriesExceededError:
         logger.error(f"Max retries exceeded for {transcription_id}")
         _mark_transcription_failed(
-            db, transcription_id,
-            "処理の最大再試行回数を超えました。しばらく経ってから再試行してください。"
+            db,
+            transcription_id,
+            "処理の最大再試行回数を超えました。しばらく経ってから再試行してください。",
         )
         return {"status": "failed", "message": "Max retries exceeded"}
 
@@ -142,6 +143,7 @@ def process_transcription_task(self, transcription_id: str):
         # Clean up audio file
         if audio_path:
             import os
+
             if os.path.exists(audio_path):
                 try:
                     os.unlink(audio_path)
@@ -155,9 +157,11 @@ def _mark_transcription_failed(db, transcription_id: str, error_message: str):
     from app.models.transcription import Transcription
 
     try:
-        transcription = db.query(Transcription).filter(
-            Transcription.id == UUID(transcription_id)
-        ).first()
+        transcription = (
+            db.query(Transcription)
+            .filter(Transcription.id == UUID(transcription_id))
+            .first()
+        )
 
         if transcription:
             transcription.processing_status = "failed"
@@ -181,5 +185,7 @@ def enqueue_transcription(transcription_id: UUID) -> str:
         Celery task ID
     """
     result = process_transcription_task.delay(str(transcription_id))
-    logger.info(f"Enqueued transcription task: {transcription_id}, celery_task_id: {result.id}")
+    logger.info(
+        f"Enqueued transcription task: {transcription_id}, celery_task_id: {result.id}"
+    )
     return result.id

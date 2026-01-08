@@ -1,11 +1,13 @@
 """
 Infographic model for storing generated infographic structures.
 """
+
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.sql import func
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -20,6 +22,7 @@ class Infographic(Base):
     - sections: List of section objects with heading, icon_hint, key_points, etc.
     - footer_note: Optional footer text
     """
+
     __tablename__ = "infographics"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

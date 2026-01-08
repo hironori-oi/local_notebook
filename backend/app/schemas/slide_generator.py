@@ -1,6 +1,7 @@
 """Schemas for slide generator API."""
+
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 # Slide Content schemas
 class SlideContentBase(BaseModel):
     """Base slide content."""
+
     bullets: List[str] = Field(default_factory=list)
     subtitle: Optional[str] = None
     details: Optional[str] = None
@@ -16,6 +18,7 @@ class SlideContentBase(BaseModel):
 
 class SlideOut(BaseModel):
     """Output schema for a single slide."""
+
     id: UUID
     slide_number: int
     slide_type: str
@@ -31,6 +34,7 @@ class SlideOut(BaseModel):
 
 class SlideUpdate(BaseModel):
     """Request to update a slide."""
+
     title: Optional[str] = None
     content: Optional[Dict[str, Any]] = None
     speaker_notes: Optional[str] = None
@@ -40,6 +44,7 @@ class SlideUpdate(BaseModel):
 # Message schemas
 class MessageOut(BaseModel):
     """Output schema for a chat message."""
+
     id: UUID
     role: str
     content: str
@@ -52,6 +57,7 @@ class MessageOut(BaseModel):
 # Project schemas
 class ProjectCreate(BaseModel):
     """Request to create a new project."""
+
     title: str
     source_text: str
     target_slide_count: Optional[int] = None
@@ -62,6 +68,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectSummary(BaseModel):
     """Summary of a project (for list view)."""
+
     id: UUID
     title: str
     status: str
@@ -75,6 +82,7 @@ class ProjectSummary(BaseModel):
 
 class ProjectDetail(BaseModel):
     """Detailed project information."""
+
     id: UUID
     title: str
     source_text: str
@@ -95,6 +103,7 @@ class ProjectDetail(BaseModel):
 
 class ProjectListResponse(BaseModel):
     """Response for project list."""
+
     items: List[ProjectSummary]
     total: int
     offset: int
@@ -103,11 +112,13 @@ class ProjectListResponse(BaseModel):
 
 class RefineRequest(BaseModel):
     """Request to refine slides."""
+
     instruction: str
 
 
 class RefineResponse(BaseModel):
     """Response for slide refinement."""
+
     message: str
     slides: List[SlideOut]
 
@@ -115,6 +126,7 @@ class RefineResponse(BaseModel):
 # Template schemas
 class TemplateOut(BaseModel):
     """Output schema for a template."""
+
     id: UUID
     name: str
     description: Optional[str] = None
@@ -128,6 +140,7 @@ class TemplateOut(BaseModel):
 
 class TemplateListResponse(BaseModel):
     """Response for template list."""
+
     items: List[TemplateOut]
     total: int
 
@@ -135,6 +148,7 @@ class TemplateListResponse(BaseModel):
 # Style schemas
 class StyleSettingsColors(BaseModel):
     """Color settings for a style."""
+
     primary: str = "#1a73e8"
     secondary: str = "#5f6368"
     accent: str = "#ea4335"
@@ -144,12 +158,14 @@ class StyleSettingsColors(BaseModel):
 
 class StyleSettingsFonts(BaseModel):
     """Font settings for a style."""
+
     title: str = "Yu Gothic UI"
     body: str = "Yu Gothic UI"
 
 
 class StyleSettingsSizes(BaseModel):
     """Size settings for a style."""
+
     title: int = 44
     subtitle: int = 28
     body: int = 20
@@ -157,6 +173,7 @@ class StyleSettingsSizes(BaseModel):
 
 class StyleSettings(BaseModel):
     """Full style settings."""
+
     colors: StyleSettingsColors = Field(default_factory=StyleSettingsColors)
     fonts: StyleSettingsFonts = Field(default_factory=StyleSettingsFonts)
     sizes: StyleSettingsSizes = Field(default_factory=StyleSettingsSizes)
@@ -165,6 +182,7 @@ class StyleSettings(BaseModel):
 
 class StyleCreate(BaseModel):
     """Request to create a style."""
+
     name: str
     description: Optional[str] = None
     settings: StyleSettings
@@ -173,6 +191,7 @@ class StyleCreate(BaseModel):
 
 class StyleUpdate(BaseModel):
     """Request to update a style."""
+
     name: Optional[str] = None
     description: Optional[str] = None
     settings: Optional[StyleSettings] = None
@@ -181,6 +200,7 @@ class StyleUpdate(BaseModel):
 
 class StyleOut(BaseModel):
     """Output schema for a style."""
+
     id: UUID
     name: str
     description: Optional[str] = None
@@ -195,5 +215,6 @@ class StyleOut(BaseModel):
 
 class StyleListResponse(BaseModel):
     """Response for style list."""
+
     items: List[StyleOut]
     total: int

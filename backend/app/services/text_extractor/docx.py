@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List, Tuple
+
 from docx import Document
 
 

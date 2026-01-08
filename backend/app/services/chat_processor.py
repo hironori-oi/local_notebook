@@ -6,26 +6,25 @@ This module handles asynchronous chat message processing:
 - Processes LLM generation in background
 - Updates message status when complete or failed
 """
+
 import asyncio
+import json
 import logging
 import threading
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
-import json
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.models.message import Message
+from app.core.config import settings
 from app.models.chat_session import ChatSession
+from app.models.message import Message
 from app.models.source import Source
-from app.services.rag_utils import (
-    get_conversation_history_generic,
-    update_session_timestamp,
-)
 from app.services.embedding import embed_texts
 from app.services.llm_client import call_llm
-from app.core.config import settings
+from app.services.rag_utils import (get_conversation_history_generic,
+                                    update_session_timestamp)
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +164,7 @@ async def _process_formatted_text_mode(
     if source_ids:
         uuid_source_ids = [UUID(sid) for sid in source_ids]
     else:
-        rows = db.execute(
-            f"SELECT id FROM sources WHERE notebook_id = '{notebook_id}'"
-        )
+        rows = db.execute(f"SELECT id FROM sources WHERE notebook_id = '{notebook_id}'")
         uuid_source_ids = [row[0] for row in rows]
 
     if not uuid_source_ids:
@@ -191,7 +188,9 @@ async def _process_formatted_text_mode(
     context_text = "\n\n---\n\n".join(contexts)
     max_context_chars = 30000
     if len(context_text) > max_context_chars:
-        context_text = context_text[:max_context_chars] + "\n\n[...テキストが長いため一部省略...]"
+        context_text = (
+            context_text[:max_context_chars] + "\n\n[...テキストが長いため一部省略...]"
+        )
 
     system_prompt = (
         "あなたは社内資料の内容に基づいて回答するアシスタントです。\n"
@@ -227,7 +226,8 @@ async def _process_rag_mode(
     conversation_history: List[dict],
 ) -> tuple[str, List[str]]:
     """Process using RAG with vector similarity search."""
-    from sqlalchemy import select, func, text
+    from sqlalchemy import func, select, text
+
     from app.models.source_chunk import SourceChunk
     from app.services.rag_utils import format_embedding_for_pgvector
 
@@ -246,7 +246,8 @@ async def _process_rag_mode(
     if source_ids:
         uuid_source_ids = [UUID(sid) for sid in source_ids]
         chunks = db.execute(
-            text(f"""
+            text(
+                f"""
                 SELECT sc.id, sc.source_id, sc.content, sc.page_number, s.title,
                        1 - (sc.embedding <-> '{embedding_str}'::vector) as similarity
                 FROM source_chunks sc
@@ -255,12 +256,14 @@ async def _process_rag_mode(
                   AND s.notebook_id = :notebook_id
                 ORDER BY sc.embedding <-> '{embedding_str}'::vector
                 LIMIT :k
-            """),
-            {"source_ids": uuid_source_ids, "notebook_id": notebook_id, "k": k}
+            """
+            ),
+            {"source_ids": uuid_source_ids, "notebook_id": notebook_id, "k": k},
         ).fetchall()
     else:
         chunks = db.execute(
-            text(f"""
+            text(
+                f"""
                 SELECT sc.id, sc.source_id, sc.content, sc.page_number, s.title,
                        1 - (sc.embedding <-> '{embedding_str}'::vector) as similarity
                 FROM source_chunks sc
@@ -268,8 +271,9 @@ async def _process_rag_mode(
                 WHERE s.notebook_id = :notebook_id
                 ORDER BY sc.embedding <-> '{embedding_str}'::vector
                 LIMIT :k
-            """),
-            {"notebook_id": notebook_id, "k": k}
+            """
+            ),
+            {"notebook_id": notebook_id, "k": k},
         ).fetchall()
 
     # Filter by similarity threshold
@@ -356,6 +360,7 @@ def start_chat_processing_background(
     Creates a new event loop for the background task to avoid
     issues with the main FastAPI event loop.
     """
+
     def run_in_thread():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

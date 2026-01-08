@@ -3,34 +3,29 @@ Council management API endpoints.
 
 Provides CRUD operations for councils (審議会) and calendar view.
 """
+
+from datetime import datetime, timedelta
 from typing import List, Literal
 from uuid import UUID
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import or_, func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_council_access, parse_uuid
+from app.core.deps import (check_council_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.council import Council
-from app.models.council_meeting import CouncilMeeting
 from app.models.council_agenda_item import CouncilAgendaItem
+from app.models.council_meeting import CouncilMeeting
 from app.models.council_note import CouncilNote
 from app.models.user import User
-from app.schemas.council import (
-    CouncilCreate,
-    CouncilUpdate,
-    CouncilOut,
-    CouncilListOut,
-    CouncilDetailOut,
-)
-from app.schemas.council_meeting import (
-    CalendarResponse,
-    CalendarMeetingItem,
-    GlobalCalendarResponse,
-    GlobalCalendarMeetingItem,
-)
-from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.schemas.council import (CouncilCreate, CouncilDetailOut,
+                                 CouncilListOut, CouncilOut, CouncilUpdate)
+from app.schemas.council_meeting import (CalendarMeetingItem, CalendarResponse,
+                                         GlobalCalendarMeetingItem,
+                                         GlobalCalendarResponse)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 router = APIRouter(prefix="/councils", tags=["councils"])
 
@@ -38,7 +33,8 @@ router = APIRouter(prefix="/councils", tags=["councils"])
 @router.get("", response_model=List[CouncilListOut])
 def list_councils(
     filter_type: Literal["all", "mine", "public"] = Query(
-        "all", description="Filter type: all (mine + public), mine (only mine), public (only public)"
+        "all",
+        description="Filter type: all (mine + public), mine (only mine), public (only public)",
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -54,7 +50,7 @@ def list_councils(
     meeting_count_subq = (
         db.query(
             CouncilMeeting.council_id,
-            func.count(CouncilMeeting.id).label("meeting_count")
+            func.count(CouncilMeeting.id).label("meeting_count"),
         )
         .group_by(CouncilMeeting.council_id)
         .subquery()
@@ -85,10 +81,7 @@ def list_councils(
         query = query.filter(Council.is_public == True)
     else:  # "all"
         query = query.filter(
-            or_(
-                Council.owner_id == current_user.id,
-                Council.is_public == True
-            )
+            or_(Council.owner_id == current_user.id, Council.is_public == True)
         )
 
     query = query.order_by(Council.updated_at.desc())
@@ -96,20 +89,22 @@ def list_councils(
 
     councils = []
     for row in results:
-        councils.append(CouncilListOut(
-            id=row.id,
-            title=row.title,
-            description=row.description,
-            organization=row.organization,
-            council_type=row.council_type,
-            official_url=row.official_url,
-            is_public=row.is_public,
-            owner_id=row.owner_id,
-            owner_display_name=row.owner_display_name,
-            meeting_count=row.meeting_count,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        ))
+        councils.append(
+            CouncilListOut(
+                id=row.id,
+                title=row.title,
+                description=row.description,
+                organization=row.organization,
+                council_type=row.council_type,
+                official_url=row.official_url,
+                is_public=row.is_public,
+                owner_id=row.owner_id,
+                owner_display_name=row.owner_display_name,
+                meeting_count=row.meeting_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+        )
 
     return councils
 
@@ -117,7 +112,9 @@ def list_councils(
 @router.get("/calendar", response_model=GlobalCalendarResponse)
 def get_global_calendar(
     view: Literal["week", "month"] = Query("month", description="Calendar view type"),
-    date: str = Query(None, description="Reference date (YYYY-MM-DD). Defaults to today."),
+    date: str = Query(
+        None, description="Reference date (YYYY-MM-DD). Defaults to today."
+    ),
     filter_type: Literal["all", "mine", "public"] = Query(
         "all", description="Filter type: all, mine, or public"
     ),
@@ -165,15 +162,14 @@ def get_global_calendar(
         council_filter = Council.is_public == True
     else:  # "all"
         council_filter = or_(
-            Council.owner_id == current_user.id,
-            Council.is_public == True
+            Council.owner_id == current_user.id, Council.is_public == True
         )
 
     # Build agenda count subquery
     agenda_count_subq = (
         db.query(
             CouncilAgendaItem.meeting_id,
-            func.count(CouncilAgendaItem.id).label("agenda_count")
+            func.count(CouncilAgendaItem.id).label("agenda_count"),
         )
         .group_by(CouncilAgendaItem.meeting_id)
         .subquery()
@@ -192,7 +188,9 @@ def get_global_calendar(
             func.coalesce(agenda_count_subq.c.agenda_count, 0).label("agenda_count"),
         )
         .join(Council, CouncilMeeting.council_id == Council.id)
-        .outerjoin(agenda_count_subq, CouncilMeeting.id == agenda_count_subq.c.meeting_id)
+        .outerjoin(
+            agenda_count_subq, CouncilMeeting.id == agenda_count_subq.c.meeting_id
+        )
         .filter(
             council_filter,
             CouncilMeeting.scheduled_at >= start_date,
@@ -242,13 +240,17 @@ def get_council(
     council = check_council_access(db, council_uuid, current_user)
 
     # Get counts
-    meeting_count = db.query(func.count(CouncilMeeting.id)).filter(
-        CouncilMeeting.council_id == council.id
-    ).scalar()
+    meeting_count = (
+        db.query(func.count(CouncilMeeting.id))
+        .filter(CouncilMeeting.council_id == council.id)
+        .scalar()
+    )
 
-    note_count = db.query(func.count(CouncilNote.id)).filter(
-        CouncilNote.council_id == council.id
-    ).scalar()
+    note_count = (
+        db.query(func.count(CouncilNote.id))
+        .filter(CouncilNote.council_id == council.id)
+        .scalar()
+    )
 
     # Get owner display name
     owner = db.query(User).filter(User.id == council.owner_id).first()
@@ -408,7 +410,9 @@ def delete_council(
 def get_council_calendar(
     council_id: str,
     view: Literal["week", "month"] = Query("month", description="Calendar view type"),
-    date: str = Query(None, description="Reference date (YYYY-MM-DD). Defaults to today."),
+    date: str = Query(
+        None, description="Reference date (YYYY-MM-DD). Defaults to today."
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -450,7 +454,7 @@ def get_council_calendar(
     agenda_count_subq = (
         db.query(
             CouncilAgendaItem.meeting_id,
-            func.count(CouncilAgendaItem.id).label("agenda_count")
+            func.count(CouncilAgendaItem.id).label("agenda_count"),
         )
         .group_by(CouncilAgendaItem.meeting_id)
         .subquery()
@@ -465,7 +469,9 @@ def get_council_calendar(
             CouncilMeeting.scheduled_at,
             func.coalesce(agenda_count_subq.c.agenda_count, 0).label("agenda_count"),
         )
-        .outerjoin(agenda_count_subq, CouncilMeeting.id == agenda_count_subq.c.meeting_id)
+        .outerjoin(
+            agenda_count_subq, CouncilMeeting.id == agenda_count_subq.c.meeting_id
+        )
         .filter(
             CouncilMeeting.council_id == council_uuid,
             CouncilMeeting.scheduled_at >= start_date,

@@ -1,9 +1,11 @@
 """CouncilNote model for council and meeting level notes."""
+
 import uuid
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey
+
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -15,6 +17,7 @@ class CouncilNote(Base):
     If meeting_id is NULL, it's a council-level note.
     If meeting_id is set, it's a meeting-specific note.
     """
+
     __tablename__ = "council_notes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

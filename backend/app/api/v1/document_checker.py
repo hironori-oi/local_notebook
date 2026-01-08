@@ -3,59 +3,40 @@ Document Checker API - Upload and check documents for issues.
 
 Supports PDF and PowerPoint files.
 """
+
 import logging
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import (
-    APIRouter,
-    UploadFile,
-    File,
-    Form,
-    HTTPException,
-    Depends,
-    Query,
-    BackgroundTasks,
-    status,
-)
-from sqlalchemy.orm import Session
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
+                     HTTPException, Query, UploadFile, status)
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
-from app.core.config import settings
-from app.models.user import User
-from app.models.document_check import (
-    DocumentCheck,
-    DocumentCheckIssue,
-    UserCheckPreference,
-)
-from app.schemas.document_check import (
-    CheckTypeInfo,
-    CheckTypesResponse,
-    DocumentCheckSummary,
-    DocumentCheckDetail,
-    DocumentCheckIssueOut,
-    DocumentCheckUploadResponse,
-    DocumentCheckListResponse,
-    IssueUpdateRequest,
-    IssueUpdateResponse,
-    UserCheckPreferenceOut,
-    UserCheckPreferenceUpdate,
-)
-from app.services.document_checker import (
-    CHECK_TYPES,
-    get_check_types_info,
-    get_default_check_types,
-)
 from app.celery_app.tasks.document import enqueue_document_check
-from app.services.text_extractor import extract_text_from_pdf_bytes
+from app.core.config import settings
+from app.core.deps import get_current_user, get_db
+from app.models.document_check import (DocumentCheck, DocumentCheckIssue,
+                                       UserCheckPreference)
+from app.models.user import User
+from app.schemas.document_check import (CheckTypeInfo, CheckTypesResponse,
+                                        DocumentCheckDetail,
+                                        DocumentCheckIssueOut,
+                                        DocumentCheckListResponse,
+                                        DocumentCheckSummary,
+                                        DocumentCheckUploadResponse,
+                                        IssueUpdateRequest,
+                                        IssueUpdateResponse,
+                                        UserCheckPreferenceOut,
+                                        UserCheckPreferenceUpdate)
+from app.services.document_checker import (CHECK_TYPES, get_check_types_info,
+                                           get_default_check_types)
+from app.services.file_validator import (FileValidationError,
+                                         validate_file_extension,
+                                         validate_file_size,
+                                         validate_magic_bytes)
 from app.services.pptx_extractor import extract_text_from_pptx
-from app.services.file_validator import (
-    validate_file_extension,
-    validate_file_size,
-    validate_magic_bytes,
-    FileValidationError,
-)
+from app.services.text_extractor import extract_text_from_pdf_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +57,7 @@ def _validate_pptx_magic_bytes(content: bytes) -> bool:
     """Validate PPTX file magic bytes."""
     for magic_bytes, offset, _ in PPTX_MAGIC_BYTES:
         if len(content) >= offset + len(magic_bytes):
-            if content[offset:offset + len(magic_bytes)] == magic_bytes:
+            if content[offset : offset + len(magic_bytes)] == magic_bytes:
                 return True
     return False
 
@@ -387,7 +368,9 @@ async def update_issue_status(
             detail="無効な問題IDです",
         )
 
-    issue = db.query(DocumentCheckIssue).filter(DocumentCheckIssue.id == issue_uuid).first()
+    issue = (
+        db.query(DocumentCheckIssue).filter(DocumentCheckIssue.id == issue_uuid).first()
+    )
     if not issue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -395,7 +378,9 @@ async def update_issue_status(
         )
 
     # Check ownership via document
-    document = db.query(DocumentCheck).filter(DocumentCheck.id == issue.document_id).first()
+    document = (
+        db.query(DocumentCheck).filter(DocumentCheck.id == issue.document_id).first()
+    )
     if not document or document.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

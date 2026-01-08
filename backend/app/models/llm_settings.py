@@ -1,14 +1,15 @@
 """
 LLM Settings model for storing user-specific LLM configurations.
 """
+
 import uuid
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.sql import func
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
-
 
 # Default feature settings
 DEFAULT_FEATURE_SETTINGS = {
@@ -86,6 +87,7 @@ class LLMSettings(Base):
     If user_id is NULL, this represents the system default settings.
     Each user can have at most one settings record.
     """
+
     __tablename__ = "llm_settings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -100,13 +102,19 @@ class LLMSettings(Base):
 
     # Basic LLM settings
     provider = Column(String(50), nullable=False, default="ollama")
-    api_base_url = Column(String(500), nullable=False, default="http://localhost:11434/v1")
-    api_key_encrypted = Column(Text, nullable=True)  # Encrypted API key for OpenAI/Anthropic
+    api_base_url = Column(
+        String(500), nullable=False, default="http://localhost:11434/v1"
+    )
+    api_key_encrypted = Column(
+        Text, nullable=True
+    )  # Encrypted API key for OpenAI/Anthropic
     default_model = Column(String(200), nullable=False, default="gpt-oss-120b")
 
     # Embedding settings
     embedding_model = Column(String(200), nullable=False, default="embeddinggemma:300m")
-    embedding_api_base = Column(String(500), nullable=False, default="http://localhost:11434/v1")
+    embedding_api_base = Column(
+        String(500), nullable=False, default="http://localhost:11434/v1"
+    )
     embedding_dim = Column(Integer, nullable=False, default=768)
 
     # Feature-specific settings (JSONB)
@@ -125,7 +133,9 @@ class LLMSettings(Base):
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     user = relationship("User", backref="llm_settings")
@@ -164,7 +174,9 @@ class LLMSettings(Base):
             "email": 0.3,
             "infographic": 0.3,
         }
-        return self.get_feature_setting(feature, "temperature", defaults.get(feature, 0.1))
+        return self.get_feature_setting(
+            feature, "temperature", defaults.get(feature, 0.1)
+        )
 
     def get_max_tokens_for_feature(self, feature: str) -> int:
         """Get max_tokens setting for a feature."""
@@ -175,7 +187,9 @@ class LLMSettings(Base):
             "email": 8192,
             "infographic": 8192,
         }
-        return self.get_feature_setting(feature, "max_tokens", defaults.get(feature, 4096))
+        return self.get_feature_setting(
+            feature, "max_tokens", defaults.get(feature, 4096)
+        )
 
     def get_prompt(self, prompt_key: str, default: str = None) -> str | None:
         """

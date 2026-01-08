@@ -3,32 +3,21 @@ Admin API endpoints for user management.
 
 Only accessible by users with admin role.
 """
+
 import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_admin_user, parse_uuid
+from app.core.deps import get_current_admin_user, get_db, parse_uuid
 from app.models.user import User
-from app.schemas.admin import (
-    UserListItem,
-    UserDetail,
-    AdminUserCreate,
-    AdminUserUpdate,
-    UserListResponse,
-)
-from app.services.auth import (
-    create_user,
-    get_user_by_username,
-    get_password_hash,
-)
-from app.services.audit import (
-    log_action,
-    get_client_info,
-    AuditAction,
-    TargetType,
-)
+from app.schemas.admin import (AdminUserCreate, AdminUserUpdate, UserDetail,
+                               UserListItem, UserListResponse)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
+from app.services.auth import (create_user, get_password_hash,
+                               get_user_by_username)
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +97,9 @@ async def create_new_user(
         user_agent=user_agent,
     )
 
-    logger.info(f"Admin {admin_user.username} created user {user.username} with role {user.role}")
+    logger.info(
+        f"Admin {admin_user.username} created user {user.username} with role {user.role}"
+    )
 
     return UserDetail(
         id=user.id,
@@ -217,7 +208,9 @@ async def update_user(
             user_agent=user_agent,
         )
 
-        logger.info(f"Admin {admin_user.username} updated user {user.username}: {list(changes.keys())}")
+        logger.info(
+            f"Admin {admin_user.username} updated user {user.username}: {list(changes.keys())}"
+        )
 
     return UserDetail(
         id=user.id,

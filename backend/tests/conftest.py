@@ -1,33 +1,33 @@
 """
 Pytest configuration and fixtures for the test suite.
 """
+
 import os
-import pytest
 from typing import Generator
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 # Set test environment before importing app
 os.environ["ENV"] = "development"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-purposes-only-32chars"
 
-from app.main import app
-from app.db.base import Base
 from app.core.deps import get_db
+from app.db.base import Base
+from app.main import app
 from app.models.user import User
-from app.services.auth import get_password_hash, create_access_token
-
+from app.services.auth import create_access_token, get_password_hash
 
 # Use SQLite for testing (in-memory)
-SQLALCHEMY_TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "sqlite:///./test.db"
-)
+SQLALCHEMY_TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite:///./test.db")
 
 engine = create_engine(
     SQLALCHEMY_TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in SQLALCHEMY_TEST_DATABASE_URL else {},
+    connect_args=(
+        {"check_same_thread": False} if "sqlite" in SQLALCHEMY_TEST_DATABASE_URL else {}
+    ),
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -196,11 +196,14 @@ def test_user_message(db: Session, test_notebook, test_user, test_chat_session):
 
 
 @pytest.fixture
-def test_assistant_message(db: Session, test_notebook, test_user, test_chat_session, test_user_message):
+def test_assistant_message(
+    db: Session, test_notebook, test_user, test_chat_session, test_user_message
+):
     """Create a test assistant message."""
-    from app.models.message import Message
     import json
     from datetime import datetime, timedelta
+
+    from app.models.message import Message
 
     message = Message(
         notebook_id=test_notebook.id,

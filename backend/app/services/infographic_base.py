@@ -6,15 +6,16 @@ This module provides shared functionality for generating infographics:
 - Common LLM call and JSON parsing flow
 - Post-processing utilities
 """
+
 import logging
-from typing import List, Callable, Awaitable, Any
+from typing import Any, Awaitable, Callable, List
 
 from sqlalchemy.orm import Session
 
-from app.schemas.infographic import InfographicStructure
-from app.services.llm_client import call_generation_llm
-from app.services.json_parser import parse_llm_json
 from app.core.exceptions import BadRequestError, LLMConnectionError
+from app.schemas.infographic import InfographicStructure
+from app.services.json_parser import parse_llm_json
+from app.services.llm_client import call_generation_llm
 
 logger = logging.getLogger(__name__)
 
@@ -26,25 +27,25 @@ logger = logging.getLogger(__name__)
 # Valid icon hints for infographic sections
 VALID_ICON_HINTS = [
     "lightbulb",  # アイデア・ポイント
-    "chart",      # データ・統計
-    "target",     # 目標・ゴール
-    "users",      # 人・チーム
-    "shield",     # 安全・セキュリティ
-    "clock",      # 時間・スケジュール
-    "warning",    # 注意・リスク
-    "check",      # 完了・確認
-    "arrow",      # プロセス・流れ
-    "star",       # 重要・おすすめ
+    "chart",  # データ・統計
+    "target",  # 目標・ゴール
+    "users",  # 人・チーム
+    "shield",  # 安全・セキュリティ
+    "clock",  # 時間・スケジュール
+    "warning",  # 注意・リスク
+    "check",  # 完了・確認
+    "arrow",  # プロセス・流れ
+    "star",  # 重要・おすすめ
 ]
 
 # Valid color hints for infographic sections
 VALID_COLOR_HINTS = [
-    "primary",    # メイン色・青系
+    "primary",  # メイン色・青系
     "secondary",  # サブ色・グレー系
-    "accent",     # アクセント色・紫系
-    "success",    # 成功・緑系
-    "warning",    # 警告・黄色系
-    "danger",     # 危険・赤系
+    "accent",  # アクセント色・紫系
+    "success",  # 成功・緑系
+    "warning",  # 警告・黄色系
+    "danger",  # 危険・赤系
 ]
 
 # Common icon hint documentation for system prompts
@@ -101,6 +102,7 @@ OUTPUT_RULES = """## 出力ルール
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def build_system_prompt(domain: str, additional_rules: str = "") -> str:
     """
@@ -196,7 +198,9 @@ def build_user_template(source_description: str, footer_note: str) -> str:
 JSONのみを出力してください："""
 
 
-def postprocess_infographic_structure(structure: InfographicStructure) -> InfographicStructure:
+def postprocess_infographic_structure(
+    structure: InfographicStructure,
+) -> InfographicStructure:
     """
     Post-process an infographic structure.
 
@@ -268,5 +272,7 @@ async def generate_infographic_from_context(
     # Post-process
     structure = postprocess_infographic_structure(structure)
 
-    logger.info(f"Successfully generated {domain_name} infographic with {len(structure.sections)} sections")
+    logger.info(
+        f"Successfully generated {domain_name} infographic with {len(structure.sections)} sections"
+    )
     return structure

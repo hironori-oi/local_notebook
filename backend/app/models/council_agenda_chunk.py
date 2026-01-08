@@ -1,13 +1,15 @@
 """CouncilAgendaChunk model for RAG vector search."""
-import uuid
-from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
 
-from app.db.base import Base
+import uuid
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from app.core.config import settings
+from app.db.base import Base
 
 
 class CouncilAgendaChunk(Base):
@@ -17,6 +19,7 @@ class CouncilAgendaChunk(Base):
     Each chunk contains a portion of either materials or minutes text,
     along with its embedding vector for similarity search.
     """
+
     __tablename__ = "council_agenda_chunks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

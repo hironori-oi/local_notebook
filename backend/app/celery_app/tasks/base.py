@@ -11,7 +11,7 @@ from typing import Optional
 
 from celery import Task
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.celery_app.celery import celery_app
 from app.core.config import settings
@@ -91,9 +91,11 @@ def recover_transcription_tasks(db: Session) -> int:
     from app.models.transcription import Transcription
 
     # Find tasks stuck in 'processing' status
-    stuck_tasks = db.query(Transcription).filter(
-        Transcription.processing_status == "processing"
-    ).all()
+    stuck_tasks = (
+        db.query(Transcription)
+        .filter(Transcription.processing_status == "processing")
+        .all()
+    )
 
     if not stuck_tasks:
         logger.info("No stuck transcription tasks found")
@@ -110,7 +112,9 @@ def recover_transcription_tasks(db: Session) -> int:
             db.commit()
 
             # Re-enqueue the task
-            from app.celery_app.tasks.transcription import process_transcription_task
+            from app.celery_app.tasks.transcription import \
+                process_transcription_task
+
             process_transcription_task.delay(str(task.id))
 
             logger.info(f"Re-enqueued transcription task: {task.id}")
@@ -138,9 +142,9 @@ def recover_source_tasks(db: Session) -> int:
     """
     from app.models.source import Source
 
-    stuck_tasks = db.query(Source).filter(
-        Source.processing_status == "processing"
-    ).all()
+    stuck_tasks = (
+        db.query(Source).filter(Source.processing_status == "processing").all()
+    )
 
     if not stuck_tasks:
         logger.info("No stuck source tasks found")
@@ -164,6 +168,7 @@ def recover_source_tasks(db: Session) -> int:
             db.commit()
 
             from app.celery_app.tasks.content import process_source_task
+
             process_source_task.delay(str(task.id), task.raw_text)
 
             logger.info(f"Re-enqueued source task: {task.id}")
@@ -190,9 +195,9 @@ def recover_minute_tasks(db: Session) -> int:
     """
     from app.models.minute import Minute
 
-    stuck_tasks = db.query(Minute).filter(
-        Minute.processing_status == "processing"
-    ).all()
+    stuck_tasks = (
+        db.query(Minute).filter(Minute.processing_status == "processing").all()
+    )
 
     if not stuck_tasks:
         logger.info("No stuck minute tasks found")
@@ -208,6 +213,7 @@ def recover_minute_tasks(db: Session) -> int:
             db.commit()
 
             from app.celery_app.tasks.content import process_minute_task
+
             process_minute_task.delay(str(task.id))
 
             logger.info(f"Re-enqueued minute task: {task.id}")
@@ -234,9 +240,9 @@ def recover_document_check_tasks(db: Session) -> int:
     """
     from app.models.document_check import DocumentCheck
 
-    stuck_tasks = db.query(DocumentCheck).filter(
-        DocumentCheck.status == "processing"
-    ).all()
+    stuck_tasks = (
+        db.query(DocumentCheck).filter(DocumentCheck.status == "processing").all()
+    )
 
     if not stuck_tasks:
         logger.info("No stuck document check tasks found")
@@ -251,7 +257,9 @@ def recover_document_check_tasks(db: Session) -> int:
             task.error_message = None
             db.commit()
 
-            from app.celery_app.tasks.document import process_document_check_task
+            from app.celery_app.tasks.document import \
+                process_document_check_task
+
             process_document_check_task.delay(str(task.id))
 
             logger.info(f"Re-enqueued document check task: {task.id}")
@@ -278,9 +286,9 @@ def recover_slide_project_tasks(db: Session) -> int:
     """
     from app.models.slide_project import SlideProject
 
-    stuck_tasks = db.query(SlideProject).filter(
-        SlideProject.status == "generating"
-    ).all()
+    stuck_tasks = (
+        db.query(SlideProject).filter(SlideProject.status == "generating").all()
+    )
 
     if not stuck_tasks:
         logger.info("No stuck slide project tasks found")
@@ -295,7 +303,9 @@ def recover_slide_project_tasks(db: Session) -> int:
             task.error_message = None
             db.commit()
 
-            from app.celery_app.tasks.slide import process_slide_generation_task
+            from app.celery_app.tasks.slide import \
+                process_slide_generation_task
+
             process_slide_generation_task.delay(str(task.id))
 
             logger.info(f"Re-enqueued slide project task: {task.id}")
@@ -325,9 +335,11 @@ def recover_chat_message_tasks(db: Session) -> int:
     """
     from app.models.chat import ChatMessage
 
-    stuck_tasks = db.query(ChatMessage).filter(
-        ChatMessage.status.in_(["pending", "generating"])
-    ).all()
+    stuck_tasks = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.status.in_(["pending", "generating"]))
+        .all()
+    )
 
     if not stuck_tasks:
         logger.info("No stuck chat message tasks found")
@@ -340,7 +352,9 @@ def recover_chat_message_tasks(db: Session) -> int:
     for task in stuck_tasks:
         try:
             task.status = "failed"
-            task.error_message = "サーバー再起動により処理が中断されました。再度質問してください。"
+            task.error_message = (
+                "サーバー再起動により処理が中断されました。再度質問してください。"
+            )
             db.commit()
             logger.info(f"Marked chat message as failed: {task.id}")
 

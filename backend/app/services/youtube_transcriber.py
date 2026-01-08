@@ -8,18 +8,17 @@ This module handles:
 - Text formatting using local LLM
 """
 
+import asyncio
+import logging
 import os
 import re
-import logging
-import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
-from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import yt_dlp
-
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -281,9 +280,9 @@ async def process_transcription(transcription_id: UUID, db_url: str):
 
     try:
         # Get transcription record
-        transcription = db.query(Transcription).filter(
-            Transcription.id == transcription_id
-        ).first()
+        transcription = (
+            db.query(Transcription).filter(Transcription.id == transcription_id).first()
+        )
 
         if not transcription:
             logger.error(f"Transcription not found: {transcription_id}")
@@ -323,9 +322,11 @@ async def process_transcription(transcription_id: UUID, db_url: str):
     except Exception as e:
         logger.error(f"Transcription failed for {transcription_id}: {e}")
         try:
-            transcription = db.query(Transcription).filter(
-                Transcription.id == transcription_id
-            ).first()
+            transcription = (
+                db.query(Transcription)
+                .filter(Transcription.id == transcription_id)
+                .first()
+            )
             if transcription:
                 transcription.processing_status = "failed"
                 transcription.processing_error = str(e)

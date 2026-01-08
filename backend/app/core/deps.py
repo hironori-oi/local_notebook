@@ -1,17 +1,18 @@
 """
 Common dependencies for FastAPI endpoints.
 """
+
 from typing import Generator, Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.user import User
-from app.models.notebook import Notebook
 from app.models.council import Council
+from app.models.notebook import Notebook
+from app.models.user import User
 from app.services.auth import decode_access_token, get_user_by_id
 
 
@@ -39,6 +40,7 @@ def parse_uuid(value: str, name: str = "ID") -> UUID:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"無効な{name}です",
         )
+
 
 # HTTP Bearer token security scheme (with auto_error=False to allow cookie fallback)
 security = HTTPBearer(auto_error=False)

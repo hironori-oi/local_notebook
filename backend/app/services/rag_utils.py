@@ -6,12 +6,13 @@ This module provides shared functionality for RAG services:
 - LLM message building
 - Context text construction
 """
+
 import logging
-from typing import List, Dict, Optional, Any, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar
 from uuid import UUID
 
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 
@@ -55,11 +56,12 @@ def get_conversation_history_generic(
     session_filter = getattr(message_model, session_id_field)
     created_at = getattr(message_model, created_at_field)
 
-    messages = db.query(message_model).filter(
-        session_filter == session_id
-    ).order_by(
-        created_at.asc()
-    ).all()
+    messages = (
+        db.query(message_model)
+        .filter(session_filter == session_id)
+        .order_by(created_at.asc())
+        .all()
+    )
 
     if not messages:
         return []
@@ -101,9 +103,9 @@ def update_session_timestamp(
         session_id: Session ID to update
         session_model: SQLAlchemy model class for sessions
     """
-    db.query(session_model).filter(
-        session_model.id == session_id
-    ).update({"updated_at": func.now()})
+    db.query(session_model).filter(session_model.id == session_id).update(
+        {"updated_at": func.now()}
+    )
     db.commit()
 
 

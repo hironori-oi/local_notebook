@@ -9,17 +9,17 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
-from app.models.user import User
-from app.models.notebook import Notebook
+from app.core.deps import get_current_user, get_db
 from app.models.chat_session import ChatSession
-from app.models.message import Message
-from app.models.source import Source
-from app.models.minute import Minute
 from app.models.generated_email import GeneratedEmail
+from app.models.message import Message
+from app.models.minute import Minute
+from app.models.notebook import Notebook
+from app.models.source import Source
+from app.models.user import User
 from app.services.export_service import export_service
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -175,7 +175,9 @@ async def export_notebook(
                 "id": str(notebook.id),
                 "title": notebook.title,
                 "description": notebook.description,
-                "created_at": notebook.created_at.isoformat() if notebook.created_at else None,
+                "created_at": (
+                    notebook.created_at.isoformat() if notebook.created_at else None
+                ),
             },
             "exported_at": datetime.now().isoformat(),
             "sources": [
@@ -225,7 +227,9 @@ async def export_notebook(
 
     if format == "txt":
         # Simple conversion: just strip markdown syntax
-        content = content.replace("#", "").replace("**", "").replace("*", "").replace(">", "")
+        content = (
+            content.replace("#", "").replace("**", "").replace("*", "").replace(">", "")
+        )
 
     filename = f"{title}_{date_str}.{format}"
 

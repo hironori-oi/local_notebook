@@ -1,8 +1,9 @@
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -11,7 +12,9 @@ class Notebook(Base):
     __tablename__ = "notebooks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
     is_public = Column(Boolean, nullable=False, default=False)
@@ -26,5 +29,5 @@ class Notebook(Base):
         "ChatSession",
         back_populates="notebook",
         cascade="all, delete-orphan",
-        order_by="desc(ChatSession.updated_at)"
+        order_by="desc(ChatSession.updated_at)",
     )

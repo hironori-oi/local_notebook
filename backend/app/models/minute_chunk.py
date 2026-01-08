@@ -1,17 +1,20 @@
 """MinuteChunk model for RAG vector storage of minute content."""
-import uuid
-from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
 
-from app.db.base import Base
+import uuid
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from app.core.config import settings
+from app.db.base import Base
 
 
 class MinuteChunk(Base):
     """Chunked minute content with embeddings for RAG search."""
+
     __tablename__ = "minute_chunks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

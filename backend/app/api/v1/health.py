@@ -1,11 +1,12 @@
 """
 Health check endpoints for system status and LLM/Embedding connectivity.
 """
+
 from fastapi import APIRouter
 
 from app.core.config import settings
-from app.services.llm_client import get_llm_client
 from app.services.embedding import get_embedding_client
+from app.services.llm_client import get_llm_client
 
 router = APIRouter(prefix="/health", tags=["health"])
 

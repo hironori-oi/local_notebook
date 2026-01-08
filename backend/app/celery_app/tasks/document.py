@@ -5,14 +5,14 @@ This module provides tasks for:
 - Processing document checks (typos, grammar, expressions, etc.)
 """
 
-import logging
 import asyncio
+import logging
 from uuid import UUID
 
 from celery import shared_task
 
-from app.celery_app.tasks.base import DatabaseTask
 from app.celery_app.config import RETRY_CONFIG, RETRYABLE_EXCEPTIONS
+from app.celery_app.tasks.base import DatabaseTask
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +43,11 @@ def process_document_check_task(self, document_id: str):
     db = self.db
 
     try:
-        document = db.query(DocumentCheck).filter(
-            DocumentCheck.id == UUID(document_id)
-        ).first()
+        document = (
+            db.query(DocumentCheck)
+            .filter(DocumentCheck.id == UUID(document_id))
+            .first()
+        )
         if not document:
             logger.error(f"Document check not found: {document_id}")
             return {"status": "error", "message": "Document check not found"}
@@ -53,9 +55,7 @@ def process_document_check_task(self, document_id: str):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(
-                process_document_check(db, UUID(document_id))
-            )
+            loop.run_until_complete(process_document_check(db, UUID(document_id)))
         finally:
             loop.close()
 
@@ -80,9 +80,11 @@ def _mark_document_failed(db, document_id: str, error_message: str):
     from app.models.document_check import DocumentCheck
 
     try:
-        document = db.query(DocumentCheck).filter(
-            DocumentCheck.id == UUID(document_id)
-        ).first()
+        document = (
+            db.query(DocumentCheck)
+            .filter(DocumentCheck.id == UUID(document_id))
+            .first()
+        )
         if document:
             document.status = "failed"
             document.error_message = error_message

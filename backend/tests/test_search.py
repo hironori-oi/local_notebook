@@ -1,11 +1,13 @@
 """
 Tests for search endpoints.
 """
+
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from unittest.mock import patch, MagicMock, AsyncMock
-from datetime import datetime
 
 from app.models.notebook import Notebook
 from app.models.user import User

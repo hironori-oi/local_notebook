@@ -3,16 +3,17 @@ Council search API endpoints.
 
 Provides search functionality across councils and meetings.
 """
+
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user, check_council_access
+from app.core.deps import check_council_access, get_current_user, get_db
 from app.models.council import Council
 from app.models.council_meeting import CouncilMeeting
 from app.models.council_note import CouncilNote
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/council-search", tags=["council-search"])
 
 class CouncilSearchResult(BaseModel):
     """Search result item."""
+
     id: str
     type: str = Field(description="council, meeting, or note")
     title: str
@@ -33,11 +35,14 @@ class CouncilSearchResult(BaseModel):
     meeting_number: Optional[int] = None
     relevance_score: float = Field(description="Relevance score (higher is better)")
     created_at: datetime
-    match_context: Optional[str] = Field(None, description="Text excerpt showing the match")
+    match_context: Optional[str] = Field(
+        None, description="Text excerpt showing the match"
+    )
 
 
 class CouncilSearchResponse(BaseModel):
     """Search response."""
+
     query: str
     council_id: Optional[str] = None
     results: List[CouncilSearchResult]
@@ -85,7 +90,9 @@ def _calculate_relevance(text: str, query: str, field_weight: float = 1.0) -> fl
     return 0.0
 
 
-def _extract_match_context(text: str, query: str, context_length: int = 100) -> Optional[str]:
+def _extract_match_context(
+    text: str, query: str, context_length: int = 100
+) -> Optional[str]:
     """Extract context around the matched query."""
     if not text or not query:
         return None
@@ -119,7 +126,9 @@ def _extract_match_context(text: str, query: str, context_length: int = 100) -> 
 @router.get("", response_model=CouncilSearchResponse)
 def search_councils(
     q: str = Query(..., min_length=1, max_length=200, description="Search query"),
-    council_id: Optional[str] = Query(None, description="Limit search to specific council"),
+    council_id: Optional[str] = Query(
+        None, description="Limit search to specific council"
+    ),
     limit: int = Query(20, ge=1, le=100, description="Maximum results"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -144,15 +153,12 @@ def search_councils(
         councils = (
             db.query(Council)
             .filter(
-                or_(
-                    Council.owner_id == current_user.id,
-                    Council.is_public == True
-                ),
+                or_(Council.owner_id == current_user.id, Council.is_public == True),
                 or_(
                     Council.title.ilike(f"%{query}%"),
                     Council.description.ilike(f"%{query}%"),
                     Council.organization.ilike(f"%{query}%"),
-                )
+                ),
             )
             .all()
         )
@@ -169,24 +175,25 @@ def search_councils(
                 if council.description and query.lower() in council.description.lower():
                     match_context = _extract_match_context(council.description, query)
 
-                results.append(CouncilSearchResult(
-                    id=str(council.id),
-                    type="council",
-                    title=council.title,
-                    description=council.description,
-                    relevance_score=relevance,
-                    created_at=council.created_at,
-                    match_context=match_context,
-                ))
+                results.append(
+                    CouncilSearchResult(
+                        id=str(council.id),
+                        type="council",
+                        title=council.title,
+                        description=council.description,
+                        relevance_score=relevance,
+                        created_at=council.created_at,
+                        match_context=match_context,
+                    )
+                )
 
     # Search meetings
-    meeting_query = db.query(CouncilMeeting).join(
-        Council, CouncilMeeting.council_id == Council.id
-    ).filter(
-        or_(
-            Council.owner_id == current_user.id,
-            Council.is_public == True
-        ),
+    meeting_query = (
+        db.query(CouncilMeeting)
+        .join(Council, CouncilMeeting.council_id == Council.id)
+        .filter(
+            or_(Council.owner_id == current_user.id, Council.is_public == True),
+        )
     )
 
     if council_uuid:
@@ -208,44 +215,58 @@ def search_councils(
 
         # Calculate relevance
         title_score = _calculate_relevance(meeting.title or "", query, 2.0)
-        materials_score = _calculate_relevance(meeting.materials_summary or "", query, 1.5)
+        materials_score = _calculate_relevance(
+            meeting.materials_summary or "", query, 1.5
+        )
         minutes_score = _calculate_relevance(meeting.minutes_summary or "", query, 1.5)
         relevance = max(title_score, materials_score, minutes_score)
 
         if relevance > 0:
             # Find match context
             match_context = None
-            if meeting.materials_summary and query.lower() in meeting.materials_summary.lower():
+            if (
+                meeting.materials_summary
+                and query.lower() in meeting.materials_summary.lower()
+            ):
                 match_context = _extract_match_context(meeting.materials_summary, query)
-            elif meeting.minutes_summary and query.lower() in meeting.minutes_summary.lower():
+            elif (
+                meeting.minutes_summary
+                and query.lower() in meeting.minutes_summary.lower()
+            ):
                 match_context = _extract_match_context(meeting.minutes_summary, query)
 
             meeting_title = f"第{meeting.meeting_number}回"
             if meeting.title:
                 meeting_title += f" {meeting.title}"
 
-            results.append(CouncilSearchResult(
-                id=str(meeting.id),
-                type="meeting",
-                title=meeting_title,
-                description=meeting.materials_summary[:200] + "..." if meeting.materials_summary and len(meeting.materials_summary) > 200 else meeting.materials_summary,
-                council_id=str(meeting.council_id),
-                council_title=council.title if council else None,
-                meeting_id=str(meeting.id),
-                meeting_number=meeting.meeting_number,
-                relevance_score=relevance,
-                created_at=meeting.created_at,
-                match_context=match_context,
-            ))
+            results.append(
+                CouncilSearchResult(
+                    id=str(meeting.id),
+                    type="meeting",
+                    title=meeting_title,
+                    description=(
+                        meeting.materials_summary[:200] + "..."
+                        if meeting.materials_summary
+                        and len(meeting.materials_summary) > 200
+                        else meeting.materials_summary
+                    ),
+                    council_id=str(meeting.council_id),
+                    council_title=council.title if council else None,
+                    meeting_id=str(meeting.id),
+                    meeting_number=meeting.meeting_number,
+                    relevance_score=relevance,
+                    created_at=meeting.created_at,
+                    match_context=match_context,
+                )
+            )
 
     # Search notes
-    note_query = db.query(CouncilNote).join(
-        Council, CouncilNote.council_id == Council.id
-    ).filter(
-        or_(
-            Council.owner_id == current_user.id,
-            Council.is_public == True
-        ),
+    note_query = (
+        db.query(CouncilNote)
+        .join(Council, CouncilNote.council_id == Council.id)
+        .filter(
+            or_(Council.owner_id == current_user.id, Council.is_public == True),
+        )
     )
 
     if council_uuid:
@@ -266,7 +287,11 @@ def search_councils(
         # Get meeting info if applicable
         meeting_number = None
         if note.meeting_id:
-            meeting = db.query(CouncilMeeting).filter(CouncilMeeting.id == note.meeting_id).first()
+            meeting = (
+                db.query(CouncilMeeting)
+                .filter(CouncilMeeting.id == note.meeting_id)
+                .first()
+            )
             if meeting:
                 meeting_number = meeting.meeting_number
 
@@ -280,19 +305,25 @@ def search_councils(
             if query.lower() in note.content.lower():
                 match_context = _extract_match_context(note.content, query)
 
-            results.append(CouncilSearchResult(
-                id=str(note.id),
-                type="note",
-                title=note.title,
-                description=note.content[:200] + "..." if len(note.content) > 200 else note.content,
-                council_id=str(note.council_id),
-                council_title=council.title if council else None,
-                meeting_id=str(note.meeting_id) if note.meeting_id else None,
-                meeting_number=meeting_number,
-                relevance_score=relevance,
-                created_at=note.created_at,
-                match_context=match_context,
-            ))
+            results.append(
+                CouncilSearchResult(
+                    id=str(note.id),
+                    type="note",
+                    title=note.title,
+                    description=(
+                        note.content[:200] + "..."
+                        if len(note.content) > 200
+                        else note.content
+                    ),
+                    council_id=str(note.council_id),
+                    council_title=council.title if council else None,
+                    meeting_id=str(note.meeting_id) if note.meeting_id else None,
+                    meeting_number=meeting_number,
+                    relevance_score=relevance,
+                    created_at=note.created_at,
+                    match_context=match_context,
+                )
+            )
 
     # Sort by relevance and limit
     results.sort(key=lambda x: x.relevance_score, reverse=True)
