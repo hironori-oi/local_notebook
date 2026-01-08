@@ -7,31 +7,40 @@ Provides CRUD operations for council agenda items (議題) with URL processing.
 from typing import List, Literal
 from uuid import UUID
 
-from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
-                     Request, status)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from sqlalchemy.orm import Session
 
-from app.celery_app.tasks.council import (enqueue_agenda_content_processing,
-                                          enqueue_agenda_summary_regeneration)
-from app.core.deps import (check_council_access, get_current_user, get_db,
-                           parse_uuid)
+from app.celery_app.tasks.council import (
+    enqueue_agenda_content_processing,
+    enqueue_agenda_summary_regeneration,
+)
+from app.core.deps import check_council_access, get_current_user, get_db, parse_uuid
 from app.models.council_agenda_item import CouncilAgendaItem
 from app.models.council_agenda_material import CouncilAgendaMaterial
 from app.models.council_meeting import CouncilMeeting
 from app.models.user import User
-from app.schemas.council_agenda import (CouncilAgendaCreate,
-                                        CouncilAgendaDetailOut,
-                                        CouncilAgendaListItem,
-                                        CouncilAgendaMaterialCreate,
-                                        CouncilAgendaMaterialDetailOut,
-                                        CouncilAgendaMaterialOut,
-                                        CouncilAgendaMaterialSummaryUpdate,
-                                        CouncilAgendaMaterialUpdate,
-                                        CouncilAgendaOut,
-                                        CouncilAgendaSummaryUpdate,
-                                        CouncilAgendaUpdate)
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
+from app.schemas.council_agenda import (
+    CouncilAgendaCreate,
+    CouncilAgendaDetailOut,
+    CouncilAgendaListItem,
+    CouncilAgendaMaterialCreate,
+    CouncilAgendaMaterialDetailOut,
+    CouncilAgendaMaterialOut,
+    CouncilAgendaMaterialSummaryUpdate,
+    CouncilAgendaMaterialUpdate,
+    CouncilAgendaOut,
+    CouncilAgendaSummaryUpdate,
+    CouncilAgendaUpdate,
+)
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
 
 router = APIRouter(prefix="/council-agendas", tags=["council-agendas"])
 

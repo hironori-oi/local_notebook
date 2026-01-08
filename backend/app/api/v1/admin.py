@@ -12,12 +12,15 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_admin_user, get_db, parse_uuid
 from app.models.user import User
-from app.schemas.admin import (AdminUserCreate, AdminUserUpdate, UserDetail,
-                               UserListItem, UserListResponse)
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
-from app.services.auth import (create_user, get_password_hash,
-                               get_user_by_username)
+from app.schemas.admin import (
+    AdminUserCreate,
+    AdminUserUpdate,
+    UserDetail,
+    UserListItem,
+    UserListResponse,
+)
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
+from app.services.auth import create_user, get_password_hash, get_user_by_username
 
 logger = logging.getLogger(__name__)
 

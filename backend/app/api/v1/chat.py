@@ -18,19 +18,24 @@ from sqlalchemy.orm import Session
 
 from app.celery_app.tasks.chat import enqueue_chat_processing
 from app.core.config import settings
-from app.core.deps import (check_notebook_access, get_current_user, get_db,
-                           parse_uuid)
+from app.core.deps import check_notebook_access, get_current_user, get_db, parse_uuid
 from app.models.chat_session import ChatSession
 from app.models.message import Message
 from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.chat import (AsyncChatResponse, ChatHistoryResponse,
-                              ChatRequest, ChatResponse, ChatSessionCreate,
-                              ChatSessionListResponse, ChatSessionResponse,
-                              ChatSessionUpdate, MessageOut,
-                              MessageStatusResponse)
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
+from app.schemas.chat import (
+    AsyncChatResponse,
+    ChatHistoryResponse,
+    ChatRequest,
+    ChatResponse,
+    ChatSessionCreate,
+    ChatSessionListResponse,
+    ChatSessionResponse,
+    ChatSessionUpdate,
+    MessageOut,
+    MessageStatusResponse,
+)
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
 from app.services.rag import rag_answer, rag_answer_stream
 
 router = APIRouter(prefix="/chat", tags=["chat"])

@@ -13,15 +13,17 @@ from app.models.council import Council
 from app.models.council_infographic import CouncilInfographic
 from app.models.council_meeting import CouncilMeeting
 from app.models.user import User
-from app.schemas.council_infographic import (CouncilInfographicCreateRequest,
-                                             CouncilInfographicListItem,
-                                             CouncilInfographicListResponse,
-                                             CouncilInfographicResponse)
+from app.schemas.council_infographic import (
+    CouncilInfographicCreateRequest,
+    CouncilInfographicListItem,
+    CouncilInfographicListResponse,
+    CouncilInfographicResponse,
+)
 from app.schemas.infographic import InfographicStructure
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
-from app.services.council_infographic_planner import \
-    generate_council_infographic_structure
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
+from app.services.council_infographic_planner import (
+    generate_council_infographic_structure,
+)
 
 router = APIRouter(prefix="/council-infographics", tags=["council-infographics"])
 

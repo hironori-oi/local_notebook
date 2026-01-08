@@ -13,39 +13,57 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings as app_settings
 from app.core.deps import get_current_user, get_db
-from app.models.llm_settings import (DEFAULT_FEATURE_SETTINGS,
-                                     DEFAULT_PROMPT_SETTINGS, LLMSettings)
+from app.models.llm_settings import (
+    DEFAULT_FEATURE_SETTINGS,
+    DEFAULT_PROMPT_SETTINGS,
+    LLMSettings,
+)
 from app.models.user import User
-from app.schemas.llm_settings import (DefaultPromptsOut,
-                                      LLMConnectionTestRequest,
-                                      LLMConnectionTestResponse,
-                                      LLMSettingsOut, LLMSettingsUpdate,
-                                      ModelInfo, ModelsListResponse,
-                                      PromptSettingsUpdate)
-from app.services.content_processor import (FORMAT_SYSTEM_PROMPT,
-                                            FORMAT_USER_TEMPLATE,
-                                            MINUTE_FORMAT_SYSTEM_PROMPT,
-                                            MINUTE_FORMAT_USER_TEMPLATE,
-                                            MINUTE_SUMMARY_SYSTEM_PROMPT,
-                                            MINUTE_SUMMARY_USER_TEMPLATE,
-                                            SUMMARY_SYSTEM_PROMPT,
-                                            SUMMARY_USER_TEMPLATE)
+from app.schemas.llm_settings import (
+    DefaultPromptsOut,
+    LLMConnectionTestRequest,
+    LLMConnectionTestResponse,
+    LLMSettingsOut,
+    LLMSettingsUpdate,
+    ModelInfo,
+    ModelsListResponse,
+    PromptSettingsUpdate,
+)
+from app.services.content_processor import (
+    FORMAT_SYSTEM_PROMPT,
+    FORMAT_USER_TEMPLATE,
+    MINUTE_FORMAT_SYSTEM_PROMPT,
+    MINUTE_FORMAT_USER_TEMPLATE,
+    MINUTE_SUMMARY_SYSTEM_PROMPT,
+    MINUTE_SUMMARY_USER_TEMPLATE,
+    SUMMARY_SYSTEM_PROMPT,
+    SUMMARY_USER_TEMPLATE,
+)
 from app.services.council_content_processor import (
     COUNCIL_MINUTES_SUMMARY_SYSTEM_PROMPT,
-    COUNCIL_MINUTES_SUMMARY_USER_TEMPLATE, COUNCIL_SUMMARY_SYSTEM_PROMPT,
-    COUNCIL_SUMMARY_USER_TEMPLATE)
+    COUNCIL_MINUTES_SUMMARY_USER_TEMPLATE,
+    COUNCIL_SUMMARY_SYSTEM_PROMPT,
+    COUNCIL_SUMMARY_USER_TEMPLATE,
+)
 from app.services.council_infographic_planner import (
-    COUNCIL_INFOGRAPHIC_SYSTEM_PROMPT, COUNCIL_INFOGRAPHIC_USER_TEMPLATE)
-from app.services.document_checker import (DOCUMENT_CHECK_SYSTEM_PROMPT,
-                                           DOCUMENT_CHECK_USER_TEMPLATE)
-from app.services.email_generator import (EMAIL_SYSTEM_PROMPT,
-                                          EMAIL_USER_TEMPLATE)
-from app.services.infographic_planner import (INFOGRAPHIC_SYSTEM_PROMPT,
-                                              INFOGRAPHIC_USER_TEMPLATE)
-from app.services.slide_generator import (SLIDE_GENERATION_SYSTEM_PROMPT,
-                                          SLIDE_GENERATION_USER_TEMPLATE,
-                                          SLIDE_REFINEMENT_SYSTEM_PROMPT,
-                                          SLIDE_REFINEMENT_USER_TEMPLATE)
+    COUNCIL_INFOGRAPHIC_SYSTEM_PROMPT,
+    COUNCIL_INFOGRAPHIC_USER_TEMPLATE,
+)
+from app.services.document_checker import (
+    DOCUMENT_CHECK_SYSTEM_PROMPT,
+    DOCUMENT_CHECK_USER_TEMPLATE,
+)
+from app.services.email_generator import EMAIL_SYSTEM_PROMPT, EMAIL_USER_TEMPLATE
+from app.services.infographic_planner import (
+    INFOGRAPHIC_SYSTEM_PROMPT,
+    INFOGRAPHIC_USER_TEMPLATE,
+)
+from app.services.slide_generator import (
+    SLIDE_GENERATION_SYSTEM_PROMPT,
+    SLIDE_GENERATION_USER_TEMPLATE,
+    SLIDE_REFINEMENT_SYSTEM_PROMPT,
+    SLIDE_REFINEMENT_USER_TEMPLATE,
+)
 
 logger = logging.getLogger(__name__)
 

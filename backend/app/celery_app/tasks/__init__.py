@@ -12,12 +12,13 @@ This package contains task definitions for various background operations:
 
 from app.celery_app.tasks.base import recover_all_processing_tasks
 from app.celery_app.tasks.chat import process_chat_message_task
-from app.celery_app.tasks.content import (process_minute_task,
-                                          process_source_task)
-from app.celery_app.tasks.council import (process_agenda_content_task,
-                                          process_agenda_materials_task,
-                                          process_agenda_minutes_task,
-                                          regenerate_agenda_summary_task)
+from app.celery_app.tasks.content import process_minute_task, process_source_task
+from app.celery_app.tasks.council import (
+    process_agenda_content_task,
+    process_agenda_materials_task,
+    process_agenda_minutes_task,
+    regenerate_agenda_summary_task,
+)
 from app.celery_app.tasks.document import process_document_check_task
 from app.celery_app.tasks.slide import process_slide_generation_task
 from app.celery_app.tasks.transcription import process_transcription_task
