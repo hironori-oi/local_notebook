@@ -16,12 +16,13 @@ from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.models.transcription import Transcription
 from app.models.user import User
-from app.schemas.transcription import (TranscriptionCreate,
-                                       TranscriptionListItem,
-                                       TranscriptionListResponse,
-                                       TranscriptionResponse)
-from app.services.youtube_transcriber import (extract_video_id,
-                                              is_whisper_configured)
+from app.schemas.transcription import (
+    TranscriptionCreate,
+    TranscriptionListItem,
+    TranscriptionListResponse,
+    TranscriptionResponse,
+)
+from app.services.youtube_transcriber import extract_video_id, is_whisper_configured
 
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,18 @@ from pathlib import Path
 from typing import List
 from uuid import UUID
 
-from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
-                     HTTPException, Query, Request, UploadFile, status)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.celery_app.tasks.content import enqueue_source_processing
@@ -17,19 +27,24 @@ from app.models.source import Source
 from app.models.source_chunk import SourceChunk
 from app.models.source_folder import SourceFolder
 from app.models.user import User
-from app.schemas.source import (SourceDetailOut, SourceListResponse, SourceOut,
-                                SourceSummaryUpdate, SourceUpdate,
-                                SourceUploadResponse)
+from app.schemas.source import (
+    SourceDetailOut,
+    SourceListResponse,
+    SourceOut,
+    SourceSummaryUpdate,
+    SourceUpdate,
+    SourceUploadResponse,
+)
 from app.schemas.source_folder import SourceMoveRequest
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
 from app.services.embedding import embed_texts
-from app.services.file_validator import (FileValidationError,
-                                         validate_uploaded_file)
+from app.services.file_validator import FileValidationError, validate_uploaded_file
 from app.services.text_chunker import chunk_pages_with_overlap
-from app.services.text_extractor import (extract_text_from_docx,
-                                         extract_text_from_pdf,
-                                         extract_text_from_txt)
+from app.services.text_extractor import (
+    extract_text_from_docx,
+    extract_text_from_pdf,
+    extract_text_from_txt,
+)
 
 logger = logging.getLogger(__name__)
 

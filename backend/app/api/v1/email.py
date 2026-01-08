@@ -8,16 +8,18 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import (check_notebook_access, get_current_user, get_db,
-                           parse_uuid)
+from app.core.deps import check_notebook_access, get_current_user, get_db, parse_uuid
 from app.models.generated_email import GeneratedEmail
 from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.email import (EmailGenerateRequest, EmailGenerateResponse,
-                               GeneratedEmailCreate, GeneratedEmailOut,
-                               GeneratedEmailUpdate)
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
+from app.schemas.email import (
+    EmailGenerateRequest,
+    EmailGenerateResponse,
+    GeneratedEmailCreate,
+    GeneratedEmailOut,
+    GeneratedEmailUpdate,
+)
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
 from app.services.email_generator import generate_email_content
 
 router = APIRouter(prefix="/emails", tags=["emails"])

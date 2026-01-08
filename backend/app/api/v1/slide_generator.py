@@ -8,24 +8,48 @@ from pathlib import Path
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
-                     HTTPException, Query, UploadFile, status)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.celery_app.tasks.slide import enqueue_slide_generation
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
-from app.models.slide_project import (SlideContent, SlideMessage, SlideProject,
-                                      SlideStyle, SlideTemplate)
+from app.models.slide_project import (
+    SlideContent,
+    SlideMessage,
+    SlideProject,
+    SlideStyle,
+    SlideTemplate,
+)
 from app.models.user import User
-from app.schemas.slide_generator import (MessageOut, ProjectCreate,
-                                         ProjectDetail, ProjectListResponse,
-                                         ProjectSummary, RefineRequest,
-                                         RefineResponse, SlideOut, SlideUpdate,
-                                         StyleCreate, StyleListResponse,
-                                         StyleOut, StyleUpdate,
-                                         TemplateListResponse, TemplateOut)
+from app.schemas.slide_generator import (
+    MessageOut,
+    ProjectCreate,
+    ProjectDetail,
+    ProjectListResponse,
+    ProjectSummary,
+    RefineRequest,
+    RefineResponse,
+    SlideOut,
+    SlideUpdate,
+    StyleCreate,
+    StyleListResponse,
+    StyleOut,
+    StyleUpdate,
+    TemplateListResponse,
+    TemplateOut,
+)
 from app.services.pptx_extractor import get_slide_count
 from app.services.slide_builder import build_pptx_from_project
 from app.services.slide_generator import generate_slides, refine_slides
