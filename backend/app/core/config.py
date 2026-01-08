@@ -80,6 +80,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_API_WINDOW: int = 60  # 1 minute in seconds
 
     # ===========================================
+    # Proxy Settings (for IP detection)
+    # ===========================================
+    # Comma-separated list of trusted proxy IPs/networks
+    # When behind a reverse proxy, set this to the proxy's IP
+    # Example: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    TRUSTED_PROXIES: str = ""
+    # Whether to trust X-Forwarded-For header (only enable behind trusted proxy)
+    TRUST_PROXY_HEADERS: bool = False
+
+    # ===========================================
     # Application Settings
     # ===========================================
     UPLOAD_DIR: str = "data/uploads"
@@ -94,24 +104,42 @@ class Settings(BaseSettings):
     MAX_CHAT_HISTORY_CHARS: int = 8000
 
     # ===========================================
-    # Janus Image Generation Configuration (Dedicated Server)
+    # Content Processing Settings (for email generation)
     # ===========================================
-    # Janus-Pro-7B server API base URL
-    JANUS_API_BASE: str = "http://localhost:9000"
-    # Timeout for image generation (seconds) - generation takes 30-120s
-    JANUS_TIMEOUT: int = 180
-    # Enable/disable image generation (set to False to skip)
-    JANUS_ENABLED: bool = True
-    # Default image dimensions for infographics (384x384 for Janus-Pro-7B)
-    JANUS_INFOGRAPHIC_WIDTH: int = 384
-    JANUS_INFOGRAPHIC_HEIGHT: int = 384
-    # Default image dimensions for slides
-    JANUS_SLIDE_WIDTH: int = 384
-    JANUS_SLIDE_HEIGHT: int = 384
-    # CFG weight for image generation
-    JANUS_CFG_WEIGHT: float = 5.0
-    # Temperature for image generation
-    JANUS_TEMPERATURE: float = 1.0
+    # Maximum input text length for formatting (characters)
+    CONTENT_FORMAT_MAX_LENGTH: int = 20000
+    # Maximum input text length for summarization (characters)
+    CONTENT_SUMMARY_MAX_LENGTH: int = 30000
+    # Maximum characters for fallback content in email generation
+    # Note: Set high enough to include all speakers in meeting minutes
+    CONTENT_FALLBACK_MAX_LENGTH: int = 15000
+
+    # ===========================================
+    # YouTube Transcription Settings
+    # ===========================================
+    # External Whisper server URL (runs on separate machine with GPU)
+    # Example: http://192.168.1.100:8001
+    WHISPER_SERVER_URL: Optional[str] = None
+    TEMP_AUDIO_DIR: str = "data/audio_temp"
+    MAX_VIDEO_DURATION_MINUTES: int = 60
+
+    # ===========================================
+    # Redis & Celery Configuration
+    # ===========================================
+    REDIS_URL: str = "redis://localhost:6379/0"
+    # If not set, REDIS_URL is used for both broker and backend
+    CELERY_BROKER_URL: Optional[str] = None
+    CELERY_RESULT_BACKEND: Optional[str] = None
+
+    @property
+    def celery_broker_url(self) -> str:
+        """Get Celery broker URL (defaults to REDIS_URL)."""
+        return self.CELERY_BROKER_URL or self.REDIS_URL
+
+    @property
+    def celery_result_backend(self) -> str:
+        """Get Celery result backend URL (defaults to REDIS_URL)."""
+        return self.CELERY_RESULT_BACKEND or self.REDIS_URL
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod

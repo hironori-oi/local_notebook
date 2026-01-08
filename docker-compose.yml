@@ -19,6 +19,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - notebooklm-network
+
+  # Redis (Message Broker & Result Backend for Celery)
+  redis:
+    image: redis:7-alpine
+    container_name: notebooklm-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notebooklm-network
 
   # Backend API (FastAPI)
   backend:
@@ -30,9 +50,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-notebooklm}:${POSTGRES_PASSWORD:-notebooklm_password}@postgres:5432/${POSTGRES_DB:-notebooklm}
+
+      # Redis (Celery broker/backend)
+      REDIS_URL: redis://redis:6379/0
 
       # Environment
       ENV: ${ENV:-production}
@@ -74,19 +101,17 @@ services:
       # Generated files directory
       GENERATED_FILES_DIR: /app/data/generated
 
-      # Janus Image Generation (Dedicated Server)
-      JANUS_API_BASE: ${JANUS_API_BASE:-http://host.docker.internal:9000}
-      JANUS_TIMEOUT: ${JANUS_TIMEOUT:-180}
-      JANUS_ENABLED: ${JANUS_ENABLED:-true}
-      JANUS_INFOGRAPHIC_WIDTH: ${JANUS_INFOGRAPHIC_WIDTH:-384}
-      JANUS_INFOGRAPHIC_HEIGHT: ${JANUS_INFOGRAPHIC_HEIGHT:-384}
-      JANUS_SLIDE_WIDTH: ${JANUS_SLIDE_WIDTH:-384}
-      JANUS_SLIDE_HEIGHT: ${JANUS_SLIDE_HEIGHT:-384}
-      JANUS_CFG_WEIGHT: ${JANUS_CFG_WEIGHT:-5.0}
-      JANUS_TEMPERATURE: ${JANUS_TEMPERATURE:-1.0}
+      # Whisper Server
+      WHISPER_SERVER_URL: ${WHISPER_SERVER_URL:-http://whisper-server:8001}
+
+      # Transcription settings
+      TEMP_AUDIO_DIR: /app/data/audio_temp
+      MAX_VIDEO_DURATION_MINUTES: ${MAX_VIDEO_DURATION_MINUTES:-180}
+
     volumes:
       - upload_data:/app/data/uploads
       - generated_data:/app/data/generated
+      - audio_temp:/app/data/audio_temp
     ports:
       - "8000:8000"
     healthcheck:
@@ -95,6 +120,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - notebooklm-network
 
   # Frontend (Next.js)
   frontend:
@@ -118,6 +145,77 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    networks:
+      - notebooklm-network
+
+  # Celery Worker (Background task processing)
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: notebooklm-celery-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-notebooklm}:${POSTGRES_PASSWORD:-notebooklm_password}@postgres:5432/${POSTGRES_DB:-notebooklm}
+
+      # Redis (Celery broker/backend)
+      REDIS_URL: redis://redis:6379/0
+
+      # Environment
+      ENV: ${ENV:-production}
+
+      # LLM Configuration (same as backend)
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_API_BASE: ${LLM_API_BASE:-http://host.docker.internal:11434/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-oss-120b}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
+
+      # Embedding Configuration
+      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE:-http://host.docker.internal:11434/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-plamo-embedding-1b}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-2048}
+      EMBEDDING_TIMEOUT: ${EMBEDDING_TIMEOUT:-60}
+
+      # Whisper Server
+      WHISPER_SERVER_URL: ${WHISPER_SERVER_URL:-http://whisper-server:8001}
+
+      # Transcription settings
+      TEMP_AUDIO_DIR: /app/data/audio_temp
+      MAX_VIDEO_DURATION_MINUTES: ${MAX_VIDEO_DURATION_MINUTES:-180}
+    volumes:
+      - upload_data:/app/data/uploads
+      - generated_data:/app/data/generated
+      - audio_temp:/app/data/audio_temp
+    command: ["python", "-m", "celery", "-A", "app.celery_app.celery:celery_app", "worker", "--loglevel=info", "--concurrency=4", "-Q", "default,transcription,content,llm,chat"]
+    networks:
+      - notebooklm-network
+
+  # Flower (Celery task monitoring - optional)
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: notebooklm-flower
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - celery-worker
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      FLOWER_BASIC_AUTH: ${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    ports:
+      - "5555:5555"
+    command: ["python", "-m", "celery", "-A", "app.celery_app.celery:celery_app", "flower", "--port=5555"]
+    networks:
+      - notebooklm-network
 
   # Database migrations (one-shot)
   migrations:
@@ -132,15 +230,25 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-notebooklm}:${POSTGRES_PASSWORD:-notebooklm_password}@postgres:5432/${POSTGRES_DB:-notebooklm}
     command: ["alembic", "upgrade", "head"]
     restart: "no"
+    networks:
+      - notebooklm-network
+
+  # NOTE: Whisper Server runs on a separate machine
+  # See whisper-server/README.md for setup instructions
+  # Configure WHISPER_SERVER_URL in .env to point to the external server
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
   upload_data:
     driver: local
   generated_data:
     driver: local
+  audio_temp:
+    driver: local
 
 networks:
-  default:
-    name: notebooklm-network
+  notebooklm-network:
+    driver: bridge

@@ -18,6 +18,102 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T', bound=BaseModel)
 
 
+# Mapping of Japanese key names to English for EmailContent schema
+EMAIL_CONTENT_KEY_MAPPING = {
+    # Top-level keys
+    "要約": "document_summary",
+    "資料の要約": "document_summary",
+    "資料の概要": "document_summary",
+    "document_summary": "document_summary",
+    "発言者別意見": "speaker_opinions",
+    "発言者別整理": "speaker_opinions",
+    "議論の発言者別整理": "speaker_opinions",
+    "speaker_opinions": "speaker_opinions",
+    "補足": "additional_notes",
+    "補足事項": "additional_notes",
+    "additional_notes": "additional_notes",
+    # Nested keys for speaker opinions
+    "発言者": "speaker",
+    "発言者名": "speaker",
+    "speaker": "speaker",
+    "意見": "opinions",
+    "意見リスト": "opinions",
+    "opinions": "opinions",
+}
+
+
+def _map_japanese_keys(data: dict) -> dict:
+    """
+    Map Japanese key names to English for EmailContent compatibility.
+
+    Args:
+        data: Dictionary with potentially Japanese keys
+
+    Returns:
+        Dictionary with English keys mapped
+    """
+    if not isinstance(data, dict):
+        return data
+
+    result = {}
+
+    for key, value in data.items():
+        # Map the key if it's in our mapping
+        english_key = EMAIL_CONTENT_KEY_MAPPING.get(key, key)
+
+        # Handle nested structures
+        if english_key == "speaker_opinions":
+            # Handle various formats of speaker opinions
+            if isinstance(value, list):
+                # Already a list format
+                mapped_opinions = []
+                for item in value:
+                    if isinstance(item, dict):
+                        mapped_item = {}
+                        for k, v in item.items():
+                            mapped_k = EMAIL_CONTENT_KEY_MAPPING.get(k, k)
+                            mapped_item[mapped_k] = v
+                        mapped_opinions.append(mapped_item)
+                    else:
+                        mapped_opinions.append(item)
+                result[english_key] = mapped_opinions
+            elif isinstance(value, dict):
+                # Dictionary format (speaker name as key, opinions as value)
+                # Convert to list format
+                mapped_opinions = []
+                for speaker_name, opinions in value.items():
+                    if isinstance(opinions, list):
+                        mapped_opinions.append({
+                            "speaker": speaker_name,
+                            "opinions": opinions
+                        })
+                    elif isinstance(opinions, str):
+                        mapped_opinions.append({
+                            "speaker": speaker_name,
+                            "opinions": [opinions]
+                        })
+                result[english_key] = mapped_opinions
+            else:
+                result[english_key] = value
+        elif english_key == "document_summary":
+            # Handle case where summary might be in a nested structure
+            if isinstance(value, dict):
+                # Extract text from nested structure (like "要点" -> "資料の概要")
+                summary_parts = []
+                for nested_key, nested_value in value.items():
+                    if isinstance(nested_value, list):
+                        summary_parts.extend(nested_value)
+                    elif isinstance(nested_value, str):
+                        summary_parts.append(nested_value)
+                result[english_key] = " ".join(summary_parts)
+            else:
+                result[english_key] = value
+        else:
+            result[english_key] = value
+
+    return result
+
+
 def parse_llm_json(response: str, schema: Type[T]) -> T:
     """
     Parse LLM response as JSON and validate against a Pydantic schema.
@@ -47,18 +143,23 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
     # Strategy 1: Direct JSON parse
     try:
         data = json.loads(response)
-        return schema.model_validate(data)
+        logger.debug(f"Direct JSON parse successful. Keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+        # Try with key mapping for EmailContent compatibility
+        mapped_data = _map_japanese_keys(data) if isinstance(data, dict) else data
+        return schema.model_validate(mapped_data)
     except json.JSONDecodeError as e:
         errors.append(f"Direct parse failed: {e}")
     except ValidationError as e:
         errors.append(f"Validation failed: {e}")
+        logger.warning(f"JSON parsed but validation failed. Data: {data}")
 
     # Strategy 2: Extract from ```json ... ``` code block
     json_block_match = re.search(r'```json\s*([\s\S]*?)\s*```', response, re.IGNORECASE)
     if json_block_match:
         try:
             data = json.loads(json_block_match.group(1))
-            return schema.model_validate(data)
+            mapped_data = _map_japanese_keys(data) if isinstance(data, dict) else data
+            return schema.model_validate(mapped_data)
         except (json.JSONDecodeError, ValidationError) as e:
             errors.append(f"JSON code block parse failed: {e}")
 
@@ -67,7 +168,8 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
     if generic_block_match:
         try:
             data = json.loads(generic_block_match.group(1))
-            return schema.model_validate(data)
+            mapped_data = _map_japanese_keys(data) if isinstance(data, dict) else data
+            return schema.model_validate(mapped_data)
         except (json.JSONDecodeError, ValidationError) as e:
             errors.append(f"Generic code block parse failed: {e}")
 
@@ -80,7 +182,8 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
         # Try direct parse of extracted object
         try:
             data = json.loads(json_str)
-            return schema.model_validate(data)
+            mapped_data = _map_japanese_keys(data) if isinstance(data, dict) else data
+            return schema.model_validate(mapped_data)
         except (json.JSONDecodeError, ValidationError) as e:
             errors.append(f"Extracted object parse failed: {e}")
 
@@ -88,7 +191,8 @@ def parse_llm_json(response: str, schema: Type[T]) -> T:
         cleaned = _clean_json_string(json_str)
         try:
             data = json.loads(cleaned)
-            return schema.model_validate(data)
+            mapped_data = _map_japanese_keys(data) if isinstance(data, dict) else data
+            return schema.model_validate(mapped_data)
         except (json.JSONDecodeError, ValidationError) as e:
             errors.append(f"Cleaned JSON parse failed: {e}")
 

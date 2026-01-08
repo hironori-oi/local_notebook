@@ -65,6 +65,10 @@ class ChatRequest(BaseModel):
         True,
         description="Whether to use RAG search. If False, direct LLM conversation."
     )
+    use_formatted_text: bool = Field(
+        False,
+        description="Whether to use formatted_text instead of RAG chunks. Provides full document context."
+    )
 
 
 class ChatResponse(BaseModel):
@@ -84,6 +88,8 @@ class MessageOut(BaseModel):
     role: str
     content: str
     source_refs: Optional[List[str]] = None
+    status: str = "completed"  # pending, generating, completed, failed
+    error_message: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -95,3 +101,24 @@ class ChatHistoryResponse(BaseModel):
     session_id: str
     messages: List[MessageOut]
     total: int
+
+
+# =============================================================================
+# Async Chat Schemas
+# =============================================================================
+
+class AsyncChatResponse(BaseModel):
+    """Response schema for async chat submission."""
+    user_message_id: str
+    assistant_message_id: str
+    session_id: str
+    status: str = "pending"
+
+
+class MessageStatusResponse(BaseModel):
+    """Response schema for checking message status."""
+    message_id: str
+    status: str  # pending, generating, completed, failed
+    content: Optional[str] = None
+    source_refs: Optional[List[str]] = None
+    error_message: Optional[str] = None

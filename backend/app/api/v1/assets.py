@@ -32,7 +32,7 @@ async def get_image(filename: str):
     """
     # Security: prevent path traversal attacks
     if ".." in filename or "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="アクセスが拒否されました")
 
     file_path = IMAGE_BASE_DIR / filename
 
@@ -41,12 +41,12 @@ async def get_image(filename: str):
         file_path = file_path.resolve()
         base_path = IMAGE_BASE_DIR.resolve()
         if not str(file_path).startswith(str(base_path)):
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail="アクセスが拒否されました")
     except Exception:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="アクセスが拒否されました")
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Image not found")
+        raise HTTPException(status_code=404, detail="画像が見つかりません")
 
     return FileResponse(
         path=file_path,

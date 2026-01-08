@@ -1,24 +1,29 @@
 """
 Authentication API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_user
 from app.core.config import settings
+
 from app.models.user import User
+
 from app.schemas.auth import (
     UserRegister,
     UserLogin,
     Token,
     UserOut,
     UserWithToken,
+    PasswordChange,
 )
 from app.services.auth import (
     authenticate_user,
     create_user,
     create_access_token,
     get_user_by_username,
+    verify_password,
+    change_user_password,
 )
 from app.services.audit import (
     log_action,
@@ -27,13 +32,43 @@ from app.services.audit import (
     TargetType,
 )
 
+# Cookie settings for secure token storage
+COOKIE_NAME = "access_token"
+COOKIE_MAX_AGE = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60  # seconds
+COOKIE_SECURE = settings.ENV == "production"  # Only send over HTTPS in production
+
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    """Set HTTPOnly secure cookie with the access token."""
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=COOKIE_MAX_AGE,
+        path="/",
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    """Clear the authentication cookie."""
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+    )
 
 
 @router.post("/register", response_model=UserWithToken, status_code=status.HTTP_201_CREATED)
 def register(
     data: UserRegister,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     """
@@ -75,18 +110,22 @@ def register(
         user_agent=user_agent,
     )
 
-    # Create access token
+    # Create access token (include role for authorization)
     access_token = create_access_token(
-        data={"sub": str(user.id), "username": user.username}
+        data={"sub": str(user.id), "username": user.username, "role": user.role}
     )
 
     expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60  # convert to seconds
+
+    # Set HTTPOnly cookie with the token
+    set_auth_cookie(response, access_token)
 
     return UserWithToken(
         user=UserOut(
             id=str(user.id),
             username=user.username,
             display_name=user.display_name,
+            role=user.role,
         ),
         token=Token(
             access_token=access_token,
@@ -100,6 +139,7 @@ def register(
 def login(
     data: UserLogin,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     """
@@ -144,16 +184,20 @@ def login(
     )
 
     access_token = create_access_token(
-        data={"sub": str(user.id), "username": user.username}
+        data={"sub": str(user.id), "username": user.username, "role": user.role}
     )
 
     expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    # Set HTTPOnly cookie with the token
+    set_auth_cookie(response, access_token)
 
     return UserWithToken(
         user=UserOut(
             id=str(user.id),
             username=user.username,
             display_name=user.display_name,
+            role=user.role,
         ),
         token=Token(
             access_token=access_token,
@@ -166,6 +210,7 @@ def login(
 @router.post("/logout")
 def logout(
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -188,4 +233,83 @@ def logout(
         user_agent=user_agent,
     )
 
+    # Clear the authentication cookie
+    clear_auth_cookie(response)
+
     return {"message": "ログアウトしました"}
+
+
+@router.post("/change-password")
+def change_password(
+    data: PasswordChange,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Change the current user's password.
+
+    - **current_password**: Current password for verification
+    - **new_password**: New password (must meet complexity requirements)
+
+    Returns success message on success.
+    """
+    ip_address, user_agent = get_client_info(request)
+
+    # Verify current password
+    if not verify_password(data.current_password, current_user.password_hash):
+        log_action(
+            db=db,
+            action=AuditAction.UPDATE,
+            user_id=current_user.id,
+            target_type=TargetType.USER,
+            target_id=str(current_user.id),
+            details={"action": "password_change_failed", "reason": "invalid_current_password"},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="現在のパスワードが正しくありません",
+        )
+
+    # Check that new password is different from current
+    if verify_password(data.new_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="新しいパスワードは現在のパスワードと異なる必要があります",
+        )
+
+    # Change password
+    change_user_password(db, current_user, data.new_password)
+
+    # Log password change
+    log_action(
+        db=db,
+        action=AuditAction.UPDATE,
+        user_id=current_user.id,
+        target_type=TargetType.USER,
+        target_id=str(current_user.id),
+        details={"action": "password_changed"},
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+    return {"message": "パスワードを変更しました"}
+
+
+@router.get("/me", response_model=UserOut)
+def get_current_user_info(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get current user information.
+
+    Returns the authenticated user's info.
+    """
+    return UserOut(
+        id=str(current_user.id),
+        username=current_user.username,
+        display_name=current_user.display_name,
+        role=current_user.role,
+    )

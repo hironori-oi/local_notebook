@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, InputHTMLAttributes } from "react";
+import { forwardRef, InputHTMLAttributes, useId } from "react";
 import { clsx } from "clsx";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -25,7 +25,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     },
     ref
   ) => {
+    const generatedId = useId();
     const inputId = id || label?.toLowerCase().replace(/\s+/g, "-");
+    const helperId = `${generatedId}-helper`;
+    const hasHelper = error || helperText;
 
     return (
       <div className="w-full">
@@ -39,13 +42,15 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <div className="relative">
           {leftIcon && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 dark:text-surface-500">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 dark:text-surface-500" aria-hidden="true">
               {leftIcon}
             </div>
           )}
           <input
             ref={ref}
             id={inputId}
+            aria-invalid={!!error}
+            aria-describedby={hasHelper ? helperId : undefined}
             className={clsx(
               "w-full px-4 py-2.5 text-sm bg-white dark:bg-surface-800 border rounded-xl transition-all duration-200",
               "placeholder:text-surface-400 dark:placeholder:text-surface-500",
@@ -60,13 +65,15 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             {...props}
           />
           {rightIcon && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 dark:text-surface-500">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 dark:text-surface-500" aria-hidden="true">
               {rightIcon}
             </div>
           )}
         </div>
-        {(error || helperText) && (
+        {hasHelper && (
           <p
+            id={helperId}
+            role={error ? "alert" : undefined}
             className={clsx(
               "mt-1.5 text-xs",
               error

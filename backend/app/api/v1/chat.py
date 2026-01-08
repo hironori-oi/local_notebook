@@ -11,10 +11,11 @@ from uuid import UUID
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, check_notebook_access, parse_uuid
 from app.models.notebook import Notebook
 from app.models.chat_session import ChatSession
 from app.models.message import Message
@@ -28,9 +29,13 @@ from app.schemas.chat import (
     ChatSessionResponse,
     ChatSessionListResponse,
     ChatHistoryResponse,
+    AsyncChatResponse,
+    MessageStatusResponse,
 )
-from app.services.rag import rag_answer
+from app.services.rag import rag_answer, rag_answer_stream
+from app.celery_app.tasks.chat import enqueue_chat_processing
 from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.core.config import settings
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -39,23 +44,9 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # Helper Functions
 # =============================================================================
 
-def verify_notebook_ownership(
-    db: Session,
-    notebook_id: UUID,
-    user_id: UUID
-) -> Notebook:
-    """Verify that the user owns the notebook."""
-    notebook = db.query(Notebook).filter(
-        Notebook.id == notebook_id,
-        Notebook.owner_id == user_id,
-    ).first()
-
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notebookが見つかりません",
-        )
-    return notebook
+def verify_notebook_access(db: Session, notebook_id: UUID, user: User) -> Notebook:
+    """Verify that the user can access the notebook (owner or public)."""
+    return check_notebook_access(db, notebook_id, user)
 
 
 def verify_session_ownership(
@@ -77,17 +68,6 @@ def verify_session_ownership(
     return session
 
 
-def parse_uuid(value: str, name: str = "ID") -> UUID:
-    """Parse a string to UUID with error handling."""
-    try:
-        return UUID(value)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"無効な{name}です",
-        )
-
-
 def message_to_out(msg: Message) -> MessageOut:
     """Convert a Message model to MessageOut schema."""
     source_refs = None
@@ -105,6 +85,8 @@ def message_to_out(msg: Message) -> MessageOut:
         role=msg.role,
         content=msg.content,
         source_refs=source_refs,
+        status=getattr(msg, 'status', 'completed'),
+        error_message=getattr(msg, 'error_message', None),
         created_at=msg.created_at,
     )
 
@@ -124,7 +106,7 @@ def create_session(
     Create a new chat session for a notebook.
     """
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
-    verify_notebook_ownership(db, nb_uuid, current_user.id)
+    verify_notebook_access(db, nb_uuid, current_user)
 
     session = ChatSession(
         notebook_id=nb_uuid,
@@ -155,7 +137,7 @@ def list_sessions(
     List all chat sessions for a notebook.
     """
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
-    verify_notebook_ownership(db, nb_uuid, current_user.id)
+    verify_notebook_access(db, nb_uuid, current_user)
 
     # Get sessions with message counts
     sessions = db.query(
@@ -261,7 +243,7 @@ async def chat(
     ip_address, user_agent = get_client_info(request)
 
     nb_uuid = parse_uuid(req.notebook_id, "Notebook ID")
-    verify_notebook_ownership(db, nb_uuid, current_user.id)
+    verify_notebook_access(db, nb_uuid, current_user)
 
     # Handle session
     session_id: Optional[UUID] = None
@@ -320,6 +302,75 @@ async def chat(
     return res
 
 
+@router.post("/stream")
+async def chat_stream(
+    req: ChatRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Send a question and receive a streaming response via Server-Sent Events (SSE).
+
+    This endpoint provides real-time streaming of the LLM response for better UX.
+    The response is formatted as SSE with the following event types:
+    - data: <content> - Partial response content
+    - data: [SOURCES]<json_array> - Source references when complete
+    - data: [DONE] - Completion signal
+    - data: [ERROR]<message> - Error message if something fails
+
+    If session_id is not provided, a new session will be created automatically.
+    """
+    nb_uuid = parse_uuid(req.notebook_id, "Notebook ID")
+    verify_notebook_access(db, nb_uuid, current_user)
+
+    # Handle session
+    session_id: Optional[UUID] = None
+    if req.session_id:
+        session_id = parse_uuid(req.session_id, "Session ID")
+        session = verify_session_ownership(db, session_id, current_user.id)
+
+        if session.notebook_id != nb_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="セッションはこのノートブックに属していません",
+            )
+    else:
+        title = req.question[:50] + "..." if len(req.question) > 50 else req.question
+        session = ChatSession(
+            notebook_id=nb_uuid,
+            user_id=current_user.id,
+            title=title,
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        session_id = session.id
+
+    async def stream_generator():
+        """Generate SSE stream from RAG service."""
+        # First yield the session_id for client reference
+        yield f"data: [SESSION]{str(session_id)}\n\n"
+
+        async for chunk in rag_answer_stream(
+            db=db,
+            req=req,
+            user_id=current_user.id,
+            session_id=session_id,
+        ):
+            yield chunk
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/history/session/{session_id}", response_model=ChatHistoryResponse)
 def get_session_history(
     session_id: str,
@@ -357,7 +408,7 @@ def get_chat_history(
     Otherwise, returns all messages from the notebook (for backward compatibility).
     """
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
-    verify_notebook_ownership(db, nb_uuid, current_user.id)
+    verify_notebook_access(db, nb_uuid, current_user)
 
     query = db.query(Message).filter(Message.notebook_id == nb_uuid)
 
@@ -384,7 +435,7 @@ def clear_chat_history(
     Otherwise, clears all sessions and messages for the notebook.
     """
     nb_uuid = parse_uuid(notebook_id, "Notebook ID")
-    verify_notebook_ownership(db, nb_uuid, current_user.id)
+    verify_notebook_access(db, nb_uuid, current_user)
 
     if session_id:
         sess_uuid = parse_uuid(session_id, "Session ID")
@@ -400,3 +451,168 @@ def clear_chat_history(
     db.commit()
 
     return None
+
+
+# =============================================================================
+# Async Chat Endpoints
+# =============================================================================
+
+@router.post("/async", response_model=AsyncChatResponse)
+async def chat_async(
+    req: ChatRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AsyncChatResponse:
+    """
+    Submit a chat question for background processing.
+
+    This endpoint returns immediately with message IDs, and the actual
+    LLM generation happens in a background task. Use the /chat/status/{message_id}
+    endpoint to check the generation status and retrieve the result.
+
+    This allows the chat to continue even if the user navigates away or
+    closes the browser.
+    """
+    ip_address, user_agent = get_client_info(request)
+
+    nb_uuid = parse_uuid(req.notebook_id, "Notebook ID")
+    verify_notebook_access(db, nb_uuid, current_user)
+
+    # Handle session
+    session_id: Optional[UUID] = None
+    if req.session_id:
+        session_id = parse_uuid(req.session_id, "Session ID")
+        session = verify_session_ownership(db, session_id, current_user.id)
+
+        if session.notebook_id != nb_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="セッションはこのノートブックに属していません",
+            )
+    else:
+        # Create new session automatically
+        title = req.question[:50] + "..." if len(req.question) > 50 else req.question
+        session = ChatSession(
+            notebook_id=nb_uuid,
+            user_id=current_user.id,
+            title=title,
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        session_id = session.id
+
+    # Create user message (completed status)
+    user_message = Message(
+        notebook_id=nb_uuid,
+        session_id=session_id,
+        user_id=current_user.id,
+        role="user",
+        content=req.question,
+        status="completed",
+    )
+    db.add(user_message)
+    db.commit()
+    db.refresh(user_message)
+
+    # Create assistant message with pending status
+    assistant_message = Message(
+        notebook_id=nb_uuid,
+        session_id=session_id,
+        user_id=None,
+        role="assistant",
+        content="",  # Will be filled by background processor
+        status="pending",
+    )
+    db.add(assistant_message)
+    db.commit()
+    db.refresh(assistant_message)
+
+    # Schedule Celery task for chat processing
+    enqueue_chat_processing(
+        message_id=assistant_message.id,
+        notebook_id=nb_uuid,
+        session_id=session_id,
+        question=req.question,
+        source_ids=req.source_ids if req.source_ids else None,
+        use_rag=req.use_rag,
+        use_formatted_text=req.use_formatted_text,
+    )
+
+    # Log chat query
+    log_action(
+        db=db,
+        action=AuditAction.CHAT_QUERY,
+        user_id=current_user.id,
+        target_type=TargetType.MESSAGE,
+        target_id=str(assistant_message.id),
+        details={
+            "notebook_id": req.notebook_id,
+            "session_id": str(session_id),
+            "question_length": len(req.question),
+            "async": True,
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+    return AsyncChatResponse(
+        user_message_id=str(user_message.id),
+        assistant_message_id=str(assistant_message.id),
+        session_id=str(session_id),
+        status="pending",
+    )
+
+
+@router.get("/status/{message_id}", response_model=MessageStatusResponse)
+def get_message_status(
+    message_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MessageStatusResponse:
+    """
+    Check the status of a message being generated.
+
+    Returns the current status and content if completed.
+    """
+    msg_uuid = parse_uuid(message_id, "Message ID")
+
+    # Find the message
+    message = db.query(Message).filter(Message.id == msg_uuid).first()
+
+    if not message:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="メッセージが見つかりません",
+        )
+
+    # Verify user access through session or notebook
+    if message.session_id:
+        session = db.query(ChatSession).filter(
+            ChatSession.id == message.session_id
+        ).first()
+        if session and session.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="このメッセージにアクセスする権限がありません",
+            )
+    else:
+        # Check notebook access
+        verify_notebook_access(db, message.notebook_id, current_user)
+
+    # Parse source_refs
+    source_refs = None
+    if message.source_refs:
+        try:
+            source_refs = json.loads(message.source_refs)
+        except json.JSONDecodeError:
+            source_refs = []
+
+    return MessageStatusResponse(
+        message_id=str(message.id),
+        status=getattr(message, 'status', 'completed'),
+        content=message.content if message.content else None,
+        source_refs=source_refs,
+        error_message=getattr(message, 'error_message', None),
+    )

@@ -1,0 +1,45 @@
+version: '3.8'
+
+# Standalone Whisper Server for Speech-to-Text
+# Run this on a separate machine with GPU
+# See README.md for setup instructions
+
+services:
+  whisper-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whisper-server
+    restart: unless-stopped
+    environment:
+      # Whisper model configuration
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+      # Device: "cuda" for GPU, "cpu" for CPU-only
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
+      # Compute type: "float16" for GPU, "int8" for CPU
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+    volumes:
+      # Cache Hugging Face models to persist across restarts
+      - whisper_cache:/root/.cache/huggingface
+    ports:
+      # Expose on all interfaces for external access
+      - "0.0.0.0:8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Model loading takes time on first start
+      start_period: 180s
+    # GPU configuration (comment out for CPU-only mode)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  whisper_cache:
+    driver: local

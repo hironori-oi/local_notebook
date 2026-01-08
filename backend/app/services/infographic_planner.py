@@ -6,98 +6,55 @@ from notebook sources using RAG context and LLM.
 """
 import logging
 import json
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.schemas.infographic import InfographicStructure
 from app.services.context_retriever import retrieve_context, format_context_for_prompt
-from app.services.llm_client import call_generation_llm
-from app.services.json_parser import parse_llm_json
-from app.core.exceptions import BadRequestError, LLMConnectionError
+from app.services.infographic_base import (
+    build_system_prompt,
+    build_user_template,
+    generate_infographic_from_context,
+)
+from app.core.exceptions import BadRequestError
+from app.models.llm_settings import LLMSettings
 
 logger = logging.getLogger(__name__)
 
 
-# System prompt for infographic generation
-INFOGRAPHIC_SYSTEM_PROMPT = """あなたは社内資料の構成を専門的に設計する情報アーキテクト兼デザイナーです。
+# System prompt for infographic generation (using shared base)
+INFOGRAPHIC_SYSTEM_PROMPT = build_system_prompt(domain="社内資料")
 
-【重要】いきなりJSONを生成せず、以下のステップで深く考えてください：
+# User template for notebook infographic generation
+INFOGRAPHIC_USER_TEMPLATE = build_user_template(
+    source_description="社内資料",
+    footer_note="出典や補足情報",
+)
 
-1. まず資料全体の論点・ストーリーラインを整理する
-2. 「1枚のインフォグラフィックとして最も伝わりやすい構成」を決める
-3. 各セクションに適切なビジュアル（図解）を計画する
-4. 最後に構成要素をJSONで出力する
 
-## 出力ルール
-1. 必ず有効なJSONのみを出力してください。説明文やマークダウンは不要です。
-2. セクションは3〜6個を目安にしてください。
-3. 各セクションには見出し、アイコンヒント、2〜4個のキーポイントを含めてください。
-4. 日本語テキスト出力。ただし image_prompt_en は必ず英語で記述してください。
-5. 各セクションに image_prompt_en を必ず含めてください（画像生成用の英語プロンプト）。
+def get_infographic_prompts(db: Session) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Get custom infographic prompts from LLM settings.
 
-## image_prompt_en の書き方
-- 英語で記述
-- フラットなインフォグラフィックスタイルを指定
-- 具体的な視覚要素を含める
-- 例: "flat infographic style, minimal design, pie chart showing 60% renewable energy, green and blue colors, clean white background, professional business presentation"
+    Args:
+        db: Database session
 
-## icon_hint で使用可能な値
-- lightbulb（アイデア・ポイント）
-- chart（データ・統計）
-- target（目標・ゴール）
-- users（人・チーム）
-- shield（安全・セキュリティ）
-- clock（時間・スケジュール）
-- warning（注意・リスク）
-- check（完了・確認）
-- arrow（プロセス・流れ）
-- star（重要・おすすめ）
+    Returns:
+        Tuple of (system_prompt, user_template), both can be None if using defaults
+    """
+    # Get system-level LLM settings (user_id is NULL)
+    settings_record = db.query(LLMSettings).filter(LLMSettings.user_id.is_(None)).first()
 
-## color_hint で使用可能な値
-- primary（メイン色・青系）
-- secondary（サブ色・グレー系）
-- accent（アクセント色・紫系）
-- success（成功・緑系）
-- warning（警告・黄色系）
-- danger（危険・赤系）
-"""
+    if not settings_record or not settings_record.prompt_settings:
+        return None, None
 
-INFOGRAPHIC_USER_TEMPLATE = """以下は社内資料から抽出した関連部分です：
+    prompt_settings = settings_record.prompt_settings
+    system_prompt = prompt_settings.get("infographic_system")
+    user_template = prompt_settings.get("infographic_user")
 
----
-{context}
----
-
-この内容をもとに、以下のトピックに関する1ページのインフォグラフィック構造を生成してください。
-
-【トピック】
-{topic}
-
-【出力JSONスキーマ】
-{{
-  "title": "インフォグラフィックのタイトル",
-  "subtitle": "サブタイトル（省略可）",
-  "sections": [
-    {{
-      "id": "section_1",
-      "heading": "セクション見出し",
-      "icon_hint": "lightbulb",
-      "color_hint": "primary",
-      "key_points": ["ポイント1", "ポイント2", "ポイント3"],
-      "detail": "詳細説明（省略可）",
-      "image_prompt_en": "flat infographic style, minimal design, lightbulb icon with innovation concept, blue and white colors, clean background"
-    }}
-  ],
-  "footer_note": "フッターノート（省略可）"
-}}
-
-【重要】
-- 各セクションに image_prompt_en を必ず含めてください
-- image_prompt_en は英語で、フラットなインフォグラフィックスタイルを指定
-
-JSONのみを出力してください："""
+    return system_prompt, user_template
 
 
 async def generate_infographic_structure(
@@ -145,75 +102,19 @@ async def generate_infographic_structure(
     # 2. Format context for prompt
     context_text = format_context_for_prompt(context_result)
 
-    # 3. Build LLM messages
-    user_content = INFOGRAPHIC_USER_TEMPLATE.format(
-        context=context_text,
+    # 3. Get custom prompts if available
+    custom_system, custom_user = get_infographic_prompts(db)
+    system_prompt = custom_system if custom_system else INFOGRAPHIC_SYSTEM_PROMPT
+    user_template = custom_user if custom_user else INFOGRAPHIC_USER_TEMPLATE
+
+    # 4. Generate using shared function
+    return await generate_infographic_from_context(
+        context_text=context_text,
         topic=topic,
+        system_prompt=system_prompt,
+        user_template=user_template,
+        domain_name="notebook",
     )
-
-    messages = [
-        {"role": "system", "content": INFOGRAPHIC_SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
-
-    # 4. Call LLM
-    try:
-        raw_response = await call_generation_llm(messages, temperature=0.3)
-    except Exception as e:
-        logger.error(f"LLM call failed for infographic generation: {e}")
-        raise LLMConnectionError(f"LLMサービスへの接続に失敗しました: {str(e)}")
-
-    # 5. Parse and validate JSON response
-    structure = parse_llm_json(raw_response, InfographicStructure)
-
-    # 6. Post-process: ensure all sections have IDs
-    for i, section in enumerate(structure.sections):
-        if not section.id:
-            section.id = f"section_{i + 1}"
-
-    # 7. Generate images for each section using Janus
-    structure = await _generate_images_for_structure(structure, notebook_id)
-
-    logger.info(f"Successfully generated infographic with {len(structure.sections)} sections")
-    return structure
-
-
-async def _generate_images_for_structure(
-    structure: InfographicStructure,
-    notebook_id: UUID,
-) -> InfographicStructure:
-    """
-    Generate images for each section in the infographic structure.
-
-    Args:
-        structure: The infographic structure with image prompts
-        notebook_id: Notebook ID for unique filename generation
-
-    Returns:
-        Updated structure with image URLs
-    """
-    from app.services.image_client import generate_infographic_image
-
-    for idx, section in enumerate(structure.sections):
-        if section.image_prompt_en:
-            # Generate unique filename
-            filename = f"infographic_{notebook_id}_{section.id}"
-
-            logger.info(f"Generating image for section {section.id}: {section.image_prompt_en[:50]}...")
-
-            image_url = await generate_infographic_image(
-                prompt=section.image_prompt_en,
-                output_filename=filename,
-                seed=idx,
-            )
-
-            if image_url:
-                section.image_url = image_url
-                logger.info(f"Generated image for section {section.id}: {image_url}")
-            else:
-                logger.warning(f"Failed to generate image for section {section.id}")
-
-    return structure
 
 
 def get_infographic_schema_example() -> str:
@@ -229,42 +130,59 @@ def get_infographic_schema_example() -> str:
         "sections": [
             {
                 "id": "section_1",
-                "heading": "現状の課題",
+                "heading": "現状の課題：需給バランスの変動拡大",
                 "icon_hint": "warning",
                 "color_hint": "warning",
                 "key_points": [
-                    "再エネ比率の拡大に伴い、需給バランスの変動が大きくなっている",
-                    "太陽光の出力変動が日中の調整力を圧迫",
-                    "既存の火力発電では対応が困難な場面も"
+                    "再エネ比率の拡大に伴い、天候による発電量の変動が大きくなり、電力の需給バランスを保つことが難しくなっている",
+                    "特に太陽光発電は日中の出力変動が激しく、急激な出力低下時に他の電源でカバーする必要がある",
+                    "従来の火力発電は起動・停止に時間がかかるため、短時間の変動への対応が困難になっている",
+                    "一部のエリアでは再エネの発電量が需要を上回り、出力制御（発電の抑制）を行うケースが増加している"
                 ],
-                "detail": None,
-                "image_prompt_en": "flat infographic style, warning icon, fluctuating graph showing energy supply and demand imbalance, orange and white colors, minimal clean design"
+                "detail": "再エネ導入拡大に伴い、特に太陽光発電の出力変動への対応が急務となっている。従来の火力発電による調整では応答速度に限界があり、新たな調整力の確保が必要。電力システム全体での対応策が求められている。",
+                "image_prompt_en": "flat infographic style, warning icon, fluctuating line graph showing energy supply demand imbalance, orange and yellow colors with red accent, minimal clean design"
             },
             {
                 "id": "section_2",
-                "heading": "必要となる調整力",
+                "heading": "必要となる調整力の種類",
                 "icon_hint": "chart",
                 "color_hint": "primary",
                 "key_points": [
-                    "短周期・長周期それぞれの調整力確保が必要",
-                    "火力・蓄電池・DRの組み合わせ",
-                    "地域間連系線の活用"
+                    "短周期調整力は数分〜十数分単位の変動に対応するもので、蓄電池や揚水発電など応答速度の速い設備が適している",
+                    "長周期調整力は数時間単位の変動に対応するもので、LNG火力など起動時間は長いが持続的に出力調整できる電源が担う",
+                    "デマンドレスポンス（DR）は需要側で電力使用を調整する仕組みで、工場の操業シフトなどにより需給バランスを改善できる",
+                    "地域間連系線を活用することで、余剰電力を他エリアに送電し、エリア間で需給を融通し合うことが可能になる"
                 ],
-                "detail": "調整力の種類と確保方法について詳細に検討が必要",
-                "image_prompt_en": "flat infographic style, stacked bar chart showing power adjustment resources, battery and power plant icons, blue and green colors, professional business chart"
+                "detail": "調整力は応答速度によって短周期・長周期に分類され、それぞれ異なる電源・設備で対応する。単一の手段ではなく、複数の調整力を組み合わせて電力システム全体の安定性を確保することが重要。",
+                "image_prompt_en": "flat infographic style, comparison diagram showing battery vs thermal power response time, blue and green colors with icons, professional business chart, clean white background"
             },
             {
                 "id": "section_3",
-                "heading": "今後のアクション",
+                "heading": "主な対策と取り組み",
+                "icon_hint": "lightbulb",
+                "color_hint": "accent",
+                "key_points": [
+                    "系統用蓄電池の導入により、短時間の需給変動に素早く対応できる調整力を確保し、再エネの出力制御を減らすことを目指す",
+                    "既存の火力発電所に柔軟性向上のための改修を行い、より速い起動・出力調整ができるよう設備を改善する",
+                    "DR普及のためのインセンティブ制度を整備し、需要家が電力使用を調整するメリットを提供することで参加を促進する",
+                    "連系線の増強工事を進め、エリア間での電力融通能力を高めることで、局所的な需給アンバランスを解消する"
+                ],
+                "detail": "各対策はそれぞれ特徴があり、蓄電池は即応性、火力改修は既存資産活用、DRは需要側参加、連系線は広域対応という役割を担う。これらを総合的に推進することで、再エネ大量導入時代の電力システムを支える。",
+                "image_prompt_en": "flat infographic style, four solution icons battery storage DR transmission grid, purple and blue accent colors, clean minimalist design, professional presentation"
+            },
+            {
+                "id": "section_4",
+                "heading": "今後のアクションと推進体制",
                 "icon_hint": "target",
                 "color_hint": "success",
                 "key_points": [
-                    "蓄電池の導入拡大",
-                    "デマンドレスポンスの活用促進",
-                    "系統増強計画の推進"
+                    "系統用蓄電池の入札公募を実施し、事業者を選定して導入を進める。設置場所は系統の状況を踏まえて決定する",
+                    "DR事業者との契約締結を進め、需要側の調整力を確保する。参加のハードルを下げる制度設計も並行して検討する",
+                    "連系線増強工事に着手し、計画的に工事を進める。工事期間中の系統運用への影響も考慮しながら実施する",
+                    "進捗状況を定期的にモニタリングし、目標達成状況を評価する。必要に応じて計画の見直しや追加対策を検討する"
                 ],
-                "detail": None,
-                "image_prompt_en": "flat infographic style, target icon with checkmarks, roadmap showing three action items, green and white colors, clean minimalist design"
+                "detail": "各施策を並行して進め、必要な調整力を段階的に確保していく。関係部門・事業者との連携体制を構築し、進捗管理と課題解決を継続的に行う。状況変化に応じて柔軟に計画を見直すことも重要。",
+                "image_prompt_en": "flat infographic style, timeline roadmap with action items and milestones, checkmark icons, green progress indicators, clean minimalist design, professional business presentation"
             }
         ],
         "footer_note": "出典：社内資料より作成"

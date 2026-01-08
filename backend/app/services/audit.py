@@ -27,6 +27,7 @@ class AuditAction:
 
     # Notebooks
     CREATE_NOTEBOOK = "create_notebook"
+    UPDATE_NOTEBOOK = "update_notebook"
     DELETE_NOTEBOOK = "delete_notebook"
     VIEW_NOTEBOOK = "view_notebook"
 
@@ -45,10 +46,44 @@ class AuditAction:
     CREATE_INFOGRAPHIC = "create_infographic"
     DELETE_INFOGRAPHIC = "delete_infographic"
 
-    # Slide Decks
-    CREATE_SLIDE_DECK = "create_slide_deck"
-    DELETE_SLIDE_DECK = "delete_slide_deck"
-    DOWNLOAD_SLIDE_DECK = "download_slide_deck"
+    # Emails
+    GENERATE_EMAIL = "generate_email"
+    SAVE_EMAIL = "save_email"
+    DELETE_EMAIL = "delete_email"
+
+    # Minutes
+    CREATE_MINUTE = "create_minute"
+    UPDATE_MINUTE = "update_minute"
+    DELETE_MINUTE = "delete_minute"
+
+    # Folders
+    CREATE_FOLDER = "create_folder"
+    UPDATE_FOLDER = "update_folder"
+    DELETE_FOLDER = "delete_folder"
+
+    # User Management (Admin)
+    CREATE_USER = "create_user"
+    UPDATE_USER = "update_user"
+    DELETE_USER = "delete_user"
+
+    # Councils
+    CREATE_COUNCIL = "create_council"
+    UPDATE_COUNCIL = "update_council"
+    DELETE_COUNCIL = "delete_council"
+    VIEW_COUNCIL = "view_council"
+
+    # Council Meetings
+    CREATE_COUNCIL_MEETING = "create_council_meeting"
+    UPDATE_COUNCIL_MEETING = "update_council_meeting"
+    DELETE_COUNCIL_MEETING = "delete_council_meeting"
+
+    # Council Notes
+    CREATE_COUNCIL_NOTE = "create_council_note"
+    UPDATE_COUNCIL_NOTE = "update_council_note"
+    DELETE_COUNCIL_NOTE = "delete_council_note"
+
+    # Council Chat
+    COUNCIL_CHAT_QUERY = "council_chat_query"
 
 
 class TargetType:
@@ -57,10 +92,16 @@ class TargetType:
     USER = "user"
     NOTEBOOK = "notebook"
     SOURCE = "source"
+    FOLDER = "folder"
     MESSAGE = "message"
     NOTE = "note"
     INFOGRAPHIC = "infographic"
-    SLIDE_DECK = "slide_deck"
+    EMAIL = "email"
+    MINUTE = "minute"
+    COUNCIL = "council"
+    COUNCIL_MEETING = "council_meeting"
+    COUNCIL_NOTE = "council_note"
+    COUNCIL_MESSAGE = "council_message"
 
 
 def get_client_info(request: Request) -> tuple[Optional[str], Optional[str]]:
@@ -73,18 +114,13 @@ def get_client_info(request: Request) -> tuple[Optional[str], Optional[str]]:
     Returns:
         Tuple of (ip_address, user_agent)
     """
-    # Get IP address
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        ip_address = forwarded.split(",")[0].strip()
-    else:
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            ip_address = real_ip.strip()
-        elif request.client:
-            ip_address = request.client.host
-        else:
-            ip_address = None
+    # Import here to avoid circular imports
+    from app.core.rate_limiter import get_client_ip
+
+    # Get IP address using shared secure implementation
+    ip_address = get_client_ip(request)
+    if ip_address == "unknown":
+        ip_address = None
 
     # Get user agent
     user_agent = request.headers.get("User-Agent")

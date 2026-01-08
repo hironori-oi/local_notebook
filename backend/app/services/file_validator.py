@@ -27,6 +27,12 @@ FILE_SIGNATURES: Dict[str, list[Tuple[bytes, int, str]]] = {
         (b"PK\x05\x06", 0, "DOCX/Office Open XML (empty)"),
         (b"PK\x07\x08", 0, "DOCX/Office Open XML (spanned)"),
     ],
+    "pptx": [
+        # PPTX files are ZIP archives starting with PK signature
+        (b"PK\x03\x04", 0, "PPTX/Office Open XML"),
+        (b"PK\x05\x06", 0, "PPTX/Office Open XML (empty)"),
+        (b"PK\x07\x08", 0, "PPTX/Office Open XML (spanned)"),
+    ],
     "txt": [],  # Text files don't have magic bytes
     "md": [],   # Markdown files don't have magic bytes
 }
@@ -37,6 +43,10 @@ MIME_TYPES: Dict[str, list[str]] = {
     "docx": [
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/zip",  # DOCX is actually a ZIP file
+    ],
+    "pptx": [
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/zip",  # PPTX is actually a ZIP file
     ],
     "txt": ["text/plain"],
     "md": ["text/plain", "text/markdown"],

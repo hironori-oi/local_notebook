@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, check_notebook_access, parse_uuid
 from app.models.notebook import Notebook
 from app.models.infographic import Infographic
 from app.models.user import User
@@ -24,30 +24,9 @@ from app.services.audit import log_action, get_client_info, AuditAction, TargetT
 router = APIRouter(prefix="/infographics", tags=["infographics"])
 
 
-def _parse_uuid(value: str, name: str = "ID") -> UUID:
-    """Parse a string to UUID, raising HTTPException on failure."""
-    try:
-        return UUID(value)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"無効な{name}です",
-        )
-
-
-def _verify_notebook_ownership(db: Session, notebook_id: UUID, user_id: UUID) -> Notebook:
-    """Verify that the notebook exists and is owned by the user."""
-    notebook = db.query(Notebook).filter(
-        Notebook.id == notebook_id,
-        Notebook.owner_id == user_id,
-    ).first()
-
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notebookが見つかりません",
-        )
-    return notebook
+def _verify_notebook_access(db: Session, notebook_id: UUID, user: User) -> Notebook:
+    """Verify that the user can access the notebook (owner or public)."""
+    return check_notebook_access(db, notebook_id, user)
 
 
 @router.post("/{notebook_id}", response_model=InfographicResponse, status_code=status.HTTP_201_CREATED)
@@ -64,13 +43,13 @@ async def create_infographic(
     Uses RAG to retrieve relevant context and LLM to generate the infographic structure.
     """
     ip_address, user_agent = get_client_info(request)
-    nb_uuid = _parse_uuid(notebook_id, "Notebook ID")
-    _verify_notebook_ownership(db, nb_uuid, current_user.id)
+    nb_uuid = parse_uuid(notebook_id, "Notebook ID")
+    _verify_notebook_access(db, nb_uuid, current_user)
 
     # Parse source IDs if provided
     source_uuids = None
     if data.source_ids:
-        source_uuids = [_parse_uuid(sid, "Source ID") for sid in data.source_ids]
+        source_uuids = [parse_uuid(sid, "Source ID") for sid in data.source_ids]
 
     # Generate infographic structure using LLM
     structure = await generate_infographic_structure(
@@ -127,8 +106,8 @@ def list_infographics(
     """
     List all infographics for a notebook.
     """
-    nb_uuid = _parse_uuid(notebook_id, "Notebook ID")
-    _verify_notebook_ownership(db, nb_uuid, current_user.id)
+    nb_uuid = parse_uuid(notebook_id, "Notebook ID")
+    _verify_notebook_access(db, nb_uuid, current_user)
 
     infographics = db.query(Infographic).filter(
         Infographic.notebook_id == nb_uuid,
@@ -159,7 +138,7 @@ def get_infographic(
     """
     Get a specific infographic by ID with full structure.
     """
-    inf_uuid = _parse_uuid(infographic_id, "Infographic ID")
+    inf_uuid = parse_uuid(infographic_id, "Infographic ID")
 
     infographic = db.query(Infographic).filter(
         Infographic.id == inf_uuid,
@@ -195,7 +174,7 @@ def delete_infographic(
     Delete an infographic.
     """
     ip_address, user_agent = get_client_info(request)
-    inf_uuid = _parse_uuid(infographic_id, "Infographic ID")
+    inf_uuid = parse_uuid(infographic_id, "Infographic ID")
 
     infographic = db.query(Infographic).filter(
         Infographic.id == inf_uuid,

@@ -27,9 +27,10 @@ WORKDIR /app
 # Create non-root user for security
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
-# Install runtime dependencies
+# Install runtime dependencies (including ffmpeg for yt-dlp audio extraction)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
@@ -39,8 +40,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY . .
 
-# Create upload directory
-RUN mkdir -p data/uploads && chown -R appuser:appgroup data
+# Create data directories
+RUN mkdir -p data/uploads data/audio_temp && chown -R appuser:appgroup data
 
 # Switch to non-root user
 USER appuser

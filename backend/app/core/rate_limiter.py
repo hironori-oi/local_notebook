@@ -16,7 +16,7 @@ from typing import Callable, Dict, Optional
 
 from fastapi import HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
 
@@ -130,7 +130,13 @@ api_limiter = RateLimiter(
 
 def get_client_ip(request: Request) -> str:
     """
-    Extract client IP from request, considering proxy headers.
+    Extract client IP from request, considering proxy headers securely.
+
+    Security considerations:
+    - X-Forwarded-For can be spoofed by clients, so we only trust it when
+      TRUST_PROXY_HEADERS is enabled (i.e., when behind a trusted reverse proxy)
+    - X-Real-IP is typically set by the reverse proxy and is more reliable
+    - When not behind a proxy, we use the direct client IP
 
     Args:
         request: FastAPI request object
@@ -138,18 +144,24 @@ def get_client_ip(request: Request) -> str:
     Returns:
         Client IP address
     """
-    # Check for forwarded header (when behind proxy/load balancer)
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        # Take the first IP in the chain
-        return forwarded.split(",")[0].strip()
+    # If proxy headers are trusted (when behind a known reverse proxy)
+    if settings.TRUST_PROXY_HEADERS:
+        # Prefer X-Real-IP (typically set by Nginx/reverse proxy to true client IP)
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
 
-    # Check for real IP header
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
+        # Fall back to X-Forwarded-For
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            # Take the leftmost IP (original client)
+            # Note: This is safe when TRUST_PROXY_HEADERS is only enabled
+            # behind a trusted proxy that properly sets this header
+            ips = [ip.strip() for ip in forwarded.split(",")]
+            if ips:
+                return ips[0]
 
-    # Fall back to direct client IP
+    # Direct connection or untrusted proxy - use actual client IP
     if request.client:
         return request.client.host
 
@@ -187,9 +199,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             logger.warning(
                 f"Rate limit exceeded for {client_ip} on {path} ({limit_type})"
             )
-            raise HTTPException(
+            # BaseHTTPMiddleware内ではHTTPExceptionを使わず、JSONResponseを直接返す
+            return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"リクエストが多すぎます。{reset_time}秒後に再試行してください。",
+                content={"detail": f"リクエストが多すぎます。{reset_time}秒後に再試行してください。"},
                 headers={
                     "Retry-After": str(reset_time),
                     "X-RateLimit-Limit": str(limiter.max_requests),

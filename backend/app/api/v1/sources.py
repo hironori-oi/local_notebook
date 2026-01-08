@@ -4,28 +4,32 @@ from typing import List
 from uuid import UUID
 import uuid
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, check_notebook_access
 from app.core.config import settings
 from app.core.exceptions import BadRequestError
 from app.models.source import Source
 from app.models.source_chunk import SourceChunk
+from app.models.source_folder import SourceFolder
 from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.source import SourceUploadResponse, SourceOut, SourceUpdate
+from app.schemas.source import SourceUploadResponse, SourceOut, SourceUpdate, SourceDetailOut, SourceSummaryUpdate, SourceListResponse
+from app.schemas.source_folder import SourceMoveRequest
 from app.services.text_extractor import (
     extract_text_from_pdf,
     extract_text_from_docx,
     extract_text_from_txt,
 )
 from app.services.embedding import embed_texts
+from app.services.text_chunker import chunk_pages_with_overlap
 from app.services.file_validator import (
     validate_uploaded_file,
     FileValidationError,
 )
 from app.services.audit import log_action, get_client_info, AuditAction, TargetType
+from app.celery_app.tasks.content import enqueue_source_processing
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +39,16 @@ router = APIRouter(prefix="/sources", tags=["sources"])
 ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md"}
 
 
-@router.get("/notebook/{notebook_id}", response_model=List[SourceOut])
+@router.get("/notebook/{notebook_id}", response_model=SourceListResponse)
 def list_sources(
     notebook_id: str,
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum items to return"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    List all sources in a notebook.
+    List all sources in a notebook with pagination.
     """
     try:
         nb_uuid = UUID(notebook_id)
@@ -52,20 +58,45 @@ def list_sources(
             detail="無効なNotebook IDです",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == nb_uuid,
-        Notebook.owner_id == current_user.id,
-    ).first()
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, nb_uuid, current_user)
 
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notebookが見つかりません",
+    # Get total count
+    total = db.query(Source).filter(Source.notebook_id == nb_uuid).count()
+
+    # Use LEFT JOIN to fetch sources with folder info in a single query (avoid N+1)
+    sources_with_folders = (
+        db.query(Source, SourceFolder)
+        .outerjoin(SourceFolder, Source.folder_id == SourceFolder.id)
+        .filter(Source.notebook_id == nb_uuid)
+        .order_by(Source.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    # Build response with folder info included
+    items = []
+    for source, folder in sources_with_folders:
+        source_out = SourceOut(
+            id=source.id,
+            notebook_id=source.notebook_id,
+            title=source.title,
+            file_type=source.file_type,
+            folder_id=source.folder_id,
+            folder_name=folder.name if folder else None,
+            processing_status=source.processing_status,
+            has_summary=source.summary is not None and len(source.summary) > 0,
+            created_at=source.created_at,
         )
+        items.append(source_out)
 
-    sources = db.query(Source).filter(Source.notebook_id == nb_uuid).all()
-    return sources
+    return SourceListResponse(
+        items=items,
+        total=total,
+        offset=offset,
+        limit=limit,
+    )
 
 
 @router.post(
@@ -75,15 +106,18 @@ def list_sources(
 )
 async def upload_source(
     request: Request,
+    background_tasks: BackgroundTasks,
     notebook_id: str = Form(...),
+    folder_id: str = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Upload a source file to a notebook.
+    Upload a source file (document) to a notebook.
 
     Supported file types: PDF, DOCX, TXT, MD
+    All uploaded files are treated as documents.
 
     Security:
     - Validates file extension
@@ -99,17 +133,8 @@ async def upload_source(
             detail="無効なNotebook IDです",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == nb_uuid,
-        Notebook.owner_id == current_user.id,
-    ).first()
-
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notebookが見つかりません",
-        )
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, nb_uuid, current_user)
 
     # Read file content
     content = await file.read()
@@ -151,10 +176,35 @@ async def upload_source(
             detail="ファイルの保存に失敗しました",
         )
 
+    # Validate folder_id if provided
+    folder_uuid = None
+    if folder_id:
+        try:
+            folder_uuid = UUID(folder_id)
+        except ValueError:
+            if dest_path.exists():
+                dest_path.unlink()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="無効なフォルダIDです",
+            )
+        folder = db.query(SourceFolder).filter(
+            SourceFolder.id == folder_uuid,
+            SourceFolder.notebook_id == nb_uuid,
+        ).first()
+        if not folder:
+            if dest_path.exists():
+                dest_path.unlink()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="フォルダが見つからないか、このノートブックに属していません",
+            )
+
     # Create source record
     source = Source(
         id=src_id,
         notebook_id=nb_uuid,
+        folder_id=folder_uuid,
         title=file.filename,
         file_path=str(dest_path),
         file_type=file_type,
@@ -195,25 +245,26 @@ async def upload_source(
             detail=f"テキスト抽出に失敗しました: {str(e)}",
         )
 
-    # Split into chunks
+    # Combine all page texts into full_text for summary generation
+    full_text = "\n\n".join([text for _, text in page_texts])
+
+    # Split into chunks with semantic boundaries and overlap
+    chunk_results = chunk_pages_with_overlap(
+        page_texts=page_texts,
+        chunk_size=2000,   # Smaller chunks for better retrieval precision
+        overlap=200,       # 200 char overlap to maintain context across boundaries
+    )
+
     chunks: List[SourceChunk] = []
-    max_chars = 4000
-    chunk_index = 0
-    for page_number, text in page_texts:
-        start = 0
-        while start < len(text):
-            part = text[start : start + max_chars]
-            if part.strip():
-                chunks.append(
-                    SourceChunk(
-                        source_id=source.id,
-                        chunk_index=chunk_index,
-                        content=part,
-                        page_number=page_number,
-                    )
-                )
-                chunk_index += 1
-            start += max_chars
+    for chunk_result in chunk_results:
+        chunks.append(
+            SourceChunk(
+                source_id=source.id,
+                chunk_index=chunk_result.chunk_index,
+                content=chunk_result.content,
+                page_number=chunk_result.page_number,
+            )
+        )
 
     # Generate embeddings
     if chunks:
@@ -236,6 +287,11 @@ async def upload_source(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"埋め込み生成に失敗しました: {str(e)}",
             )
+
+    # Trigger background processing for formatting and summary generation
+    if full_text.strip():
+        task_id = enqueue_source_processing(source.id, full_text)
+        logger.info(f"Source processing enqueued: {source.id}, celery_task_id={task_id}")
 
     # Log source upload
     ip_address, user_agent = get_client_info(request)
@@ -260,8 +316,28 @@ async def upload_source(
         f"by user {current_user.id}"
     )
 
+    # Get folder name if source is in a folder
+    folder_name = None
+    if source.folder_id:
+        folder = db.query(SourceFolder).filter(SourceFolder.id == source.folder_id).first()
+        if folder:
+            folder_name = folder.name
+
+    # Create response with has_summary field
+    source_out = SourceOut(
+        id=source.id,
+        notebook_id=source.notebook_id,
+        title=source.title,
+        file_type=source.file_type,
+        folder_id=source.folder_id,
+        folder_name=folder_name,
+        processing_status=source.processing_status,
+        has_summary=False,  # Summary generation is async
+        created_at=source.created_at,
+    )
+
     return SourceUploadResponse(
-        source=SourceOut.model_validate(source),
+        source=source_out,
         chunks_created=len(chunks),
     )
 
@@ -292,23 +368,33 @@ def update_source(
             detail="ソースが見つかりません",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == source.notebook_id,
-        Notebook.owner_id == current_user.id,
-    ).first()
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, source.notebook_id, current_user)
 
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="このソースを更新する権限がありません",
-        )
+    if data.title is not None:
+        source.title = data.title
 
-    source.title = data.title
     db.commit()
     db.refresh(source)
 
-    return source
+    # Get folder name if source is in a folder
+    folder_name = None
+    if source.folder_id:
+        folder = db.query(SourceFolder).filter(SourceFolder.id == source.folder_id).first()
+        if folder:
+            folder_name = folder.name
+
+    return SourceOut(
+        id=source.id,
+        notebook_id=source.notebook_id,
+        title=source.title,
+        file_type=source.file_type,
+        folder_id=source.folder_id,
+        folder_name=folder_name,
+        processing_status=source.processing_status,
+        has_summary=source.summary is not None and len(source.summary) > 0,
+        created_at=source.created_at,
+    )
 
 
 @router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -339,17 +425,8 @@ def delete_source(
             detail="ソースが見つかりません",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == source.notebook_id,
-        Notebook.owner_id == current_user.id,
-    ).first()
-
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="このソースを削除する権限がありません",
-        )
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, source.notebook_id, current_user)
 
     source_title = source.title
     notebook_id = str(source.notebook_id)
@@ -379,3 +456,163 @@ def delete_source(
     )
 
     return None
+
+
+@router.get("/{source_id}/detail", response_model=SourceDetailOut)
+def get_source_detail(
+    source_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get source detail including summary information.
+    """
+    try:
+        src_uuid = UUID(source_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="無効なソースIDです",
+        )
+
+    source = db.query(Source).filter(Source.id == src_uuid).first()
+
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ソースが見つかりません",
+        )
+
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, source.notebook_id, current_user)
+
+    return SourceDetailOut(
+        id=source.id,
+        notebook_id=source.notebook_id,
+        title=source.title,
+        file_type=source.file_type,
+        processing_status=source.processing_status,
+        processing_error=source.processing_error,
+        full_text=source.full_text,
+        formatted_text=source.formatted_text,
+        summary=source.summary,
+        created_at=source.created_at,
+    )
+
+
+@router.patch("/{source_id}/summary", response_model=SourceDetailOut)
+def update_source_summary(
+    source_id: str,
+    data: SourceSummaryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update source's formatted_text and/or summary.
+    """
+    try:
+        src_uuid = UUID(source_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="無効なソースIDです",
+        )
+
+    source = db.query(Source).filter(Source.id == src_uuid).first()
+
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ソースが見つかりません",
+        )
+
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, source.notebook_id, current_user)
+
+    if data.formatted_text is not None:
+        source.formatted_text = data.formatted_text
+    if data.summary is not None:
+        source.summary = data.summary
+
+    db.commit()
+    db.refresh(source)
+
+    logger.info(f"Source summary updated: {source_id} by user {current_user.id}")
+
+    return SourceDetailOut(
+        id=source.id,
+        notebook_id=source.notebook_id,
+        title=source.title,
+        file_type=source.file_type,
+        processing_status=source.processing_status,
+        processing_error=source.processing_error,
+        full_text=source.full_text,
+        formatted_text=source.formatted_text,
+        summary=source.summary,
+        created_at=source.created_at,
+    )
+
+
+@router.patch("/{source_id}/move", response_model=SourceOut)
+def move_source(
+    source_id: str,
+    data: SourceMoveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Move a source to a different folder or to root (no folder).
+
+    Set folder_id to null to move to root.
+    """
+    try:
+        src_uuid = UUID(source_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="無効なソースIDです",
+        )
+
+    source = db.query(Source).filter(Source.id == src_uuid).first()
+
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ソースが見つかりません",
+        )
+
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, source.notebook_id, current_user)
+
+    # Validate folder_id if provided
+    folder_name = None
+    if data.folder_id:
+        folder = db.query(SourceFolder).filter(
+            SourceFolder.id == data.folder_id,
+            SourceFolder.notebook_id == source.notebook_id,
+        ).first()
+        if not folder:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="フォルダが見つからないか、このノートブックに属していません",
+            )
+        folder_name = folder.name
+
+    # Update source folder
+    source.folder_id = data.folder_id
+    db.commit()
+    db.refresh(source)
+
+    logger.info(f"Source moved: {source_id} to folder {data.folder_id} by user {current_user.id}")
+
+    return SourceOut(
+        id=source.id,
+        notebook_id=source.notebook_id,
+        title=source.title,
+        file_type=source.file_type,
+        folder_id=source.folder_id,
+        folder_name=folder_name,
+        processing_status=source.processing_status,
+        has_summary=source.summary is not None and len(source.summary) > 0,
+        created_at=source.created_at,
+    )

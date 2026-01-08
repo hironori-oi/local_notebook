@@ -12,7 +12,7 @@ class SourceChunk(Base):
     __tablename__ = "source_chunks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    source_id = Column(UUID(as_uuid=True), ForeignKey("sources.id"), nullable=False)
+    source_id = Column(UUID(as_uuid=True), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True)
     chunk_index = Column(Integer, nullable=False)
     content = Column(String, nullable=False)
     page_number = Column(Integer, nullable=True)

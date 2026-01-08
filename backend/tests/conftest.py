@@ -159,3 +159,76 @@ def test_source(db: Session, test_notebook):
     db.commit()
     db.refresh(source)
     return source
+
+
+@pytest.fixture
+def test_chat_session(db: Session, test_notebook, test_user):
+    """Create a test chat session."""
+    from app.models.chat_session import ChatSession
+
+    session = ChatSession(
+        notebook_id=test_notebook.id,
+        user_id=test_user.id,
+        title="Test Chat Session",
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@pytest.fixture
+def test_user_message(db: Session, test_notebook, test_user, test_chat_session):
+    """Create a test user message."""
+    from app.models.message import Message
+
+    message = Message(
+        notebook_id=test_notebook.id,
+        session_id=test_chat_session.id,
+        user_id=test_user.id,
+        role="user",
+        content="What is the main topic of this document?",
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return message
+
+
+@pytest.fixture
+def test_assistant_message(db: Session, test_notebook, test_user, test_chat_session, test_user_message):
+    """Create a test assistant message."""
+    from app.models.message import Message
+    import json
+    from datetime import datetime, timedelta
+
+    message = Message(
+        notebook_id=test_notebook.id,
+        session_id=test_chat_session.id,
+        user_id=test_user.id,
+        role="assistant",
+        content="The main topic of this document is about testing.",
+        source_refs=json.dumps(["test_document.txt(p.1)"]),
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return message
+
+
+@pytest.fixture
+def test_note(db: Session, test_notebook, test_user, test_assistant_message):
+    """Create a test note."""
+    from app.models.note import Note
+
+    note = Note(
+        notebook_id=test_notebook.id,
+        message_id=test_assistant_message.id,
+        title="Test Note",
+        content="Custom note content",
+        created_by=test_user.id,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return note

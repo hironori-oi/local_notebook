@@ -6,10 +6,14 @@ Embedding dimension is configured via EMBEDDING_DIM environment variable.
 - embeddinggemma:300m outputs 768 dimensions
 - PLaMo-Embedding-1B outputs 2048 dimensions
 """
+import asyncio
 from typing import List, Dict, Optional
 import httpx
 
 from app.core.config import settings
+
+# Maximum concurrent embedding requests for Ollama (prevents server overload)
+EMBEDDING_CONCURRENCY_LIMIT = 5
 
 
 class EmbeddingClient:
@@ -39,6 +43,9 @@ class EmbeddingClient:
         """
         Generate embeddings for a list of texts.
 
+        For Ollama: Uses parallel processing with semaphore-limited concurrency
+        For vLLM/OpenAI: Uses batch API which handles multiple texts natively
+
         Args:
             texts: List of text strings to embed
 
@@ -48,24 +55,36 @@ class EmbeddingClient:
         if not texts:
             return []
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            if self.provider == "ollama":
-                # Ollama native API - process one at a time
-                vectors = []
-                for text in texts:
-                    resp = await client.post(
-                        f"{self.api_base}/api/embeddings",
-                        json={
-                            "model": self.model,
-                            "prompt": text,
-                        },
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                    vectors.append(data["embedding"])
-                return vectors
-            else:
-                # OpenAI-compatible API (vLLM, etc.)
+        if self.provider == "ollama":
+            # Ollama native API - parallel processing with concurrency limit
+            semaphore = asyncio.Semaphore(EMBEDDING_CONCURRENCY_LIMIT)
+
+            async def embed_single(text: str, index: int) -> tuple[int, List[float]]:
+                """Embed a single text with semaphore-limited concurrency."""
+                async with semaphore:
+                    async with httpx.AsyncClient(timeout=self.timeout) as client:
+                        resp = await client.post(
+                            f"{self.api_base}/api/embeddings",
+                            json={
+                                "model": self.model,
+                                "prompt": text,
+                            },
+                        )
+                        resp.raise_for_status()
+                        data = resp.json()
+                        return (index, data["embedding"])
+
+            # Process all texts in parallel (semaphore limits actual concurrency)
+            results = await asyncio.gather(
+                *[embed_single(text, i) for i, text in enumerate(texts)]
+            )
+
+            # Sort by index to maintain original order
+            sorted_results = sorted(results, key=lambda x: x[0])
+            return [emb for _, emb in sorted_results]
+        else:
+            # OpenAI-compatible API (vLLM, etc.) - native batch support
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(
                     f"{self.api_base}/v1/embeddings",
                     json={

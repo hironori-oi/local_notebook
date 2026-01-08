@@ -76,6 +76,7 @@ class TokenData(BaseModel):
     """JWTトークンのペイロード"""
     user_id: Optional[str] = None
     username: Optional[str] = None
+    role: Optional[str] = None
 
 
 class UserOut(BaseModel):
@@ -83,6 +84,7 @@ class UserOut(BaseModel):
     id: str
     username: str
     display_name: str
+    role: str = "user"
 
     class Config:
         from_attributes = True
@@ -92,3 +94,36 @@ class UserWithToken(BaseModel):
     """ログイン成功時のレスポンス（ユーザー情報 + トークン）"""
     user: UserOut
     token: Token
+
+
+class PasswordChange(BaseModel):
+    """パスワード変更リクエスト"""
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_complexity(cls, v: str) -> str:
+        """
+        Validate new password meets complexity requirements.
+        """
+        if len(v) < PASSWORD_MIN_LENGTH:
+            raise ValueError(f"パスワードは{PASSWORD_MIN_LENGTH}文字以上である必要があります")
+
+        if not re.search(r"[a-z]", v):
+            raise ValueError("パスワードには小文字を含める必要があります")
+
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("パスワードには大文字を含める必要があります")
+
+        if not re.search(r"\d", v):
+            raise ValueError("パスワードには数字を含める必要があります")
+
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]", v):
+            raise ValueError("パスワードには特殊文字（!@#$%^&*など）を含める必要があります")
+
+        common_passwords = {"password", "12345678", "qwerty123", "admin123"}
+        if v.lower() in common_passwords:
+            raise ValueError("このパスワードは一般的すぎるため使用できません")
+
+        return v

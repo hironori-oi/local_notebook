@@ -2,13 +2,20 @@
 LLM Client - Abstraction layer for LLM providers (Ollama, vLLM, etc.)
 
 Supports Ollama native API (/api/chat) and OpenAI-compatible API (/v1/chat/completions).
-The provider can be switched via LLM_PROVIDER environment variable.
+The provider can be switched via LLM_PROVIDER environment variable or user-specific DB settings.
 """
-from typing import List, Dict, Optional, AsyncGenerator
+import logging
+from typing import List, Dict, Optional, AsyncGenerator, TYPE_CHECKING
+from uuid import UUID
 import httpx
 import json
 
 from app.core.config import settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -56,39 +63,56 @@ class LLMClient:
         # Use provided max_tokens or fall back to instance default
         tokens_limit = max_tokens or self.max_tokens
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            if self.provider == "ollama":
-                # Ollama native API
-                resp = await client.post(
-                    f"{self.api_base}/api/chat",
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {
-                            "temperature": temperature,
-                            "num_predict": tokens_limit,
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                if self.provider == "ollama":
+                    # Ollama native API
+                    resp = await client.post(
+                        f"{self.api_base}/api/chat",
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "stream": False,
+                            "options": {
+                                "temperature": temperature,
+                                "num_predict": tokens_limit,
+                            },
                         },
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return data["message"]["content"]
-            else:
-                # OpenAI-compatible API (vLLM, etc.)
-                resp = await client.post(
-                    f"{self.api_base}/v1/chat/completions",
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "temperature": temperature,
-                        "max_tokens": tokens_limit,
-                        "stream": stream,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return data["choices"][0]["message"]["content"]
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return data["message"]["content"]
+                else:
+                    # OpenAI-compatible API (vLLM, etc.)
+                    resp = await client.post(
+                        f"{self.api_base}/v1/chat/completions",
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "temperature": temperature,
+                            "max_tokens": tokens_limit,
+                            "stream": stream,
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"]
+        except httpx.TimeoutException as e:
+            error_msg = f"LLM request timed out after {self.timeout}s (model: {self.model}, provider: {self.provider})"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg) from e
+        except httpx.ConnectError as e:
+            error_msg = f"Failed to connect to LLM server at {self.api_base} (provider: {self.provider})"
+            logger.error(error_msg)
+            raise ConnectionError(error_msg) from e
+        except httpx.HTTPStatusError as e:
+            error_msg = f"LLM server returned error: HTTP {e.response.status_code} - {e.response.text[:200]}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg) from e
+        except Exception as e:
+            error_msg = f"LLM request failed: {type(e).__name__}: {str(e) or 'No details'}"
+            logger.error(error_msg)
+            raise
 
     async def chat_stream(
         self,
@@ -270,3 +294,133 @@ async def call_generation_llm(messages: List[Dict], temperature: float = 0.3) ->
     """
     client = get_generation_llm_client()
     return await client.chat(messages, temperature=temperature)
+
+
+# =============================================================================
+# User-specific LLM Settings Functions
+# =============================================================================
+
+# Cache for user settings (short TTL)
+_user_settings_cache: Dict[UUID, tuple] = {}  # user_id -> (settings, timestamp)
+_CACHE_TTL_SECONDS = 30
+
+
+def get_user_llm_settings(db: "Session", user_id: UUID) -> Optional["LLMSettings"]:
+    """
+    Get user-specific LLM settings from database.
+
+    Uses a short-lived cache to reduce database queries.
+
+    Args:
+        db: Database session
+        user_id: User's UUID
+
+    Returns:
+        LLMSettings model or None if not found
+    """
+    import time
+    from app.models.llm_settings import LLMSettings
+
+    # Check cache
+    if user_id in _user_settings_cache:
+        cached_settings, timestamp = _user_settings_cache[user_id]
+        if time.time() - timestamp < _CACHE_TTL_SECONDS:
+            return cached_settings
+
+    # Query database
+    user_settings = db.query(LLMSettings).filter(LLMSettings.user_id == user_id).first()
+
+    # Update cache
+    if user_settings:
+        _user_settings_cache[user_id] = (user_settings, time.time())
+
+    return user_settings
+
+
+def clear_user_settings_cache(user_id: Optional[UUID] = None):
+    """
+    Clear user settings cache.
+
+    Args:
+        user_id: Specific user to clear, or None to clear all
+    """
+    global _user_settings_cache
+    if user_id:
+        _user_settings_cache.pop(user_id, None)
+    else:
+        _user_settings_cache.clear()
+
+
+def create_llm_client_for_user(
+    db: "Session",
+    user_id: UUID,
+    feature: str = "chat",
+) -> LLMClient:
+    """
+    Create an LLM client configured with user-specific settings.
+
+    Args:
+        db: Database session
+        user_id: User's UUID
+        feature: Feature name to get specific settings for
+                 (chat, format, summary, email, infographic)
+
+    Returns:
+        Configured LLMClient instance
+    """
+    user_settings = get_user_llm_settings(db, user_id)
+
+    if user_settings:
+        # Use user-specific settings
+        model = user_settings.get_model_for_feature(feature)
+        temperature = user_settings.get_temperature_for_feature(feature)
+        max_tokens = user_settings.get_max_tokens_for_feature(feature)
+
+        return LLMClient(
+            api_base=user_settings.api_base_url,
+            model=model,
+            provider=user_settings.provider,
+            timeout=300.0 if feature in ["format", "summary", "email", "infographic"] else 120.0,
+            max_tokens=max_tokens,
+        )
+    else:
+        # Fall back to environment-based settings
+        if feature in ["format", "summary", "email", "infographic"]:
+            return get_generation_llm_client()
+        else:
+            return get_llm_client()
+
+
+async def call_llm_with_user_settings(
+    db: "Session",
+    user_id: UUID,
+    messages: List[Dict],
+    feature: str = "chat",
+    temperature: Optional[float] = None,
+) -> str:
+    """
+    Call LLM using user-specific settings.
+
+    Args:
+        db: Database session
+        user_id: User's UUID
+        messages: List of message dicts with 'role' and 'content' keys
+        feature: Feature name for settings lookup
+        temperature: Override temperature (uses user setting if None)
+
+    Returns:
+        The assistant's response content as a string
+    """
+    user_settings = get_user_llm_settings(db, user_id)
+
+    if user_settings:
+        client = create_llm_client_for_user(db, user_id, feature)
+        temp = temperature if temperature is not None else user_settings.get_temperature_for_feature(feature)
+        return await client.chat(messages, temperature=temp)
+    else:
+        # Fall back to default behavior
+        if feature in ["format", "summary", "email", "infographic"]:
+            return await call_generation_llm(messages, temperature=temperature or 0.3)
+        else:
+            client = get_llm_client()
+            return await client.chat(messages, temperature=temperature or 0.1)

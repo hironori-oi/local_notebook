@@ -5,15 +5,15 @@ from typing import List
 from uuid import UUID
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, check_notebook_access
 from app.models.notebook import Notebook
 from app.models.note import Note
 from app.models.message import Message
 from app.models.user import User
-from app.schemas.note import NoteCreate, NoteUpdate, NoteOut
+from app.schemas.note import NoteCreate, NoteUpdate, NoteOut, NoteListResponse
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -46,22 +46,26 @@ def _get_note_with_messages(db: Session, note: Note) -> NoteOut:
         notebook_id=str(note.notebook_id),
         message_id=str(note.message_id),
         title=note.title,
+        content=note.content,
         created_by=str(note.created_by),
         created_at=note.created_at.isoformat(),
+        updated_at=note.updated_at.isoformat() if note.updated_at else None,
         question=user_msg.content if user_msg else None,
         answer=assistant_msg.content if assistant_msg else None,
         source_refs=source_refs,
     )
 
 
-@router.get("/notebook/{notebook_id}", response_model=List[NoteOut])
+@router.get("/notebook/{notebook_id}", response_model=NoteListResponse)
 def list_notes(
     notebook_id: str,
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum items to return"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    List all notes in a notebook.
+    List all notes in a notebook with pagination.
     """
     try:
         nb_uuid = UUID(notebook_id)
@@ -71,23 +75,71 @@ def list_notes(
             detail="無効なNotebook IDです",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == nb_uuid,
-        Notebook.owner_id == current_user.id,
-    ).first()
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, nb_uuid, current_user)
 
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notebookが見つかりません",
-        )
+    # Get total count
+    total = db.query(Note).filter(Note.notebook_id == nb_uuid).count()
 
     notes = db.query(Note).filter(
         Note.notebook_id == nb_uuid
-    ).order_by(Note.created_at.desc()).all()
+    ).order_by(Note.created_at.desc()).offset(offset).limit(limit).all()
 
-    return [_get_note_with_messages(db, note) for note in notes]
+    if not notes:
+        return NoteListResponse(items=[], total=total, offset=offset, limit=limit)
+
+    # Batch fetch all related messages to avoid N+1 queries
+    message_ids = [note.message_id for note in notes]
+    messages = db.query(Message).filter(Message.id.in_(message_ids)).all()
+    message_map = {msg.id: msg for msg in messages}
+
+    # Batch fetch user messages (preceding messages)
+    # Get all messages from this notebook to find user messages
+    all_notebook_messages = db.query(Message).filter(
+        Message.notebook_id == nb_uuid,
+        Message.role == "user"
+    ).order_by(Message.created_at.desc()).all()
+
+    # Build result efficiently
+    items = []
+    for note in notes:
+        assistant_msg = message_map.get(note.message_id)
+
+        # Find the preceding user message
+        user_msg = None
+        if assistant_msg:
+            for msg in all_notebook_messages:
+                if msg.created_at < assistant_msg.created_at:
+                    user_msg = msg
+                    break
+
+        source_refs = None
+        if assistant_msg and assistant_msg.source_refs:
+            try:
+                source_refs = json.loads(assistant_msg.source_refs)
+            except json.JSONDecodeError:
+                source_refs = []
+
+        items.append(NoteOut(
+            id=str(note.id),
+            notebook_id=str(note.notebook_id),
+            message_id=str(note.message_id),
+            title=note.title,
+            content=note.content,
+            created_by=str(note.created_by),
+            created_at=note.created_at.isoformat(),
+            updated_at=note.updated_at.isoformat() if note.updated_at else None,
+            question=user_msg.content if user_msg else None,
+            answer=assistant_msg.content if assistant_msg else None,
+            source_refs=source_refs,
+        ))
+
+    return NoteListResponse(
+        items=items,
+        total=total,
+        offset=offset,
+        limit=limit,
+    )
 
 
 @router.post("/{notebook_id}", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
@@ -109,17 +161,8 @@ def create_note(
             detail="無効なIDです",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == nb_uuid,
-        Notebook.owner_id == current_user.id,
-    ).first()
-
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notebookが見つかりません",
-        )
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, nb_uuid, current_user)
 
     # Verify message exists and belongs to this notebook
     message = db.query(Message).filter(
@@ -183,17 +226,8 @@ def get_note(
             detail="ノートが見つかりません",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == note.notebook_id,
-        Notebook.owner_id == current_user.id,
-    ).first()
-
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="このノートにアクセスする権限がありません",
-        )
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, note.notebook_id, current_user)
 
     return _get_note_with_messages(db, note)
 
@@ -206,7 +240,7 @@ def update_note(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Update a note's title.
+    Update a note's title and/or content.
     """
     try:
         note_uuid = UUID(note_id)
@@ -224,19 +258,15 @@ def update_note(
             detail="ノートが見つかりません",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == note.notebook_id,
-        Notebook.owner_id == current_user.id,
-    ).first()
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, note.notebook_id, current_user)
 
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="このノートを更新する権限がありません",
-        )
+    # Update fields if provided
+    if data.title is not None:
+        note.title = data.title
+    if data.content is not None:
+        note.content = data.content
 
-    note.title = data.title
     db.commit()
     db.refresh(note)
 
@@ -268,17 +298,8 @@ def delete_note(
             detail="ノートが見つかりません",
         )
 
-    # Verify notebook ownership
-    notebook = db.query(Notebook).filter(
-        Notebook.id == note.notebook_id,
-        Notebook.owner_id == current_user.id,
-    ).first()
-
-    if not notebook:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="このノートを削除する権限がありません",
-        )
+    # Verify notebook access (owner or public)
+    check_notebook_access(db, note.notebook_id, current_user)
 
     db.delete(note)
     db.commit()

@@ -48,6 +48,13 @@ class Message(Base):
     # "user" or "assistant"
     role = Column(String(20), nullable=False)
 
+    # Message status: pending, generating, completed, failed
+    # For async chat processing - allows background generation
+    status = Column(String(20), nullable=False, default="completed", index=True)
+
+    # Error message if status is "failed"
+    error_message = Column(Text, nullable=True)
+
     # Message content
     content = Column(Text, nullable=False)
 

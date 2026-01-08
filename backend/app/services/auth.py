@@ -77,11 +77,12 @@ def decode_access_token(token: str) -> Optional[TokenData]:
         )
         user_id: str = payload.get("sub")
         username: str = payload.get("username")
+        role: str = payload.get("role", "user")
 
         if user_id is None:
             return None
 
-        return TokenData(user_id=user_id, username=username)
+        return TokenData(user_id=user_id, username=username, role=role)
     except JWTError:
         return None
 
@@ -121,6 +122,7 @@ def create_user(
     username: str,
     password: str,
     display_name: str,
+    role: str = "user",
 ) -> User:
     """
     Create a new user.
@@ -130,6 +132,7 @@ def create_user(
         username: Unique username
         password: Plain text password (will be hashed)
         display_name: User's display name
+        role: User role ("admin" or "user", default: "user")
 
     Returns:
         Created User object
@@ -139,8 +142,31 @@ def create_user(
         username=username,
         password_hash=hashed_password,
         display_name=display_name,
+        role=role,
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def change_user_password(
+    db: Session,
+    user: User,
+    new_password: str,
+) -> User:
+    """
+    Change a user's password.
+
+    Args:
+        db: Database session
+        user: User object to update
+        new_password: New plain text password (will be hashed)
+
+    Returns:
+        Updated User object
+    """
+    user.password_hash = get_password_hash(new_password)
     db.commit()
     db.refresh(user)
     return user
