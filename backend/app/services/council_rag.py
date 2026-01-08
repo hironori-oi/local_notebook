@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.types import String
 
 from app.core.config import settings
-from app.core.exceptions import BadRequestError, EmbeddingError, LLMConnectionError
+from app.core.exceptions import (BadRequestError, EmbeddingError,
+                                 LLMConnectionError)
 from app.models.council_agenda_item import CouncilAgendaItem
 from app.models.council_chat_session import CouncilChatSession
 from app.models.council_meeting import CouncilMeeting
@@ -25,11 +26,9 @@ from app.models.council_message import CouncilMessage
 from app.schemas.council_chat import CouncilChatRequest, CouncilChatResponse
 from app.services.embedding import embed_texts
 from app.services.llm_client import call_llm
-from app.services.rag_utils import (
-    format_embedding_for_pgvector,
-    get_conversation_history_generic,
-    update_session_timestamp,
-)
+from app.services.rag_utils import (format_embedding_for_pgvector,
+                                    get_conversation_history_generic,
+                                    update_session_timestamp)
 
 logger = logging.getLogger(__name__)
 

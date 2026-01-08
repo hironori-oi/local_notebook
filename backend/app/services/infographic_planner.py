@@ -15,12 +15,11 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import BadRequestError
 from app.models.llm_settings import LLMSettings
 from app.schemas.infographic import InfographicStructure
-from app.services.context_retriever import format_context_for_prompt, retrieve_context
-from app.services.infographic_base import (
-    build_system_prompt,
-    build_user_template,
-    generate_infographic_from_context,
-)
+from app.services.context_retriever import (format_context_for_prompt,
+                                            retrieve_context)
+from app.services.infographic_base import (build_system_prompt,
+                                           build_user_template,
+                                           generate_infographic_from_context)
 
 logger = logging.getLogger(__name__)
 

@@ -8,18 +8,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import check_notebook_access, get_current_user, get_db, parse_uuid
+from app.core.deps import (check_notebook_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.infographic import Infographic
 from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.infographic import (
-    InfographicCreateRequest,
-    InfographicListItem,
-    InfographicListResponse,
-    InfographicResponse,
-    InfographicStructure,
-)
-from app.services.audit import AuditAction, TargetType, get_client_info, log_action
+from app.schemas.infographic import (InfographicCreateRequest,
+                                     InfographicListItem,
+                                     InfographicListResponse,
+                                     InfographicResponse, InfographicStructure)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 from app.services.infographic_planner import generate_infographic_structure
 
 router = APIRouter(prefix="/infographics", tags=["infographics"])

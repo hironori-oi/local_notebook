@@ -43,11 +43,9 @@ def process_transcription_task(self, transcription_id: str):
         transcription_id: UUID string of the transcription record
     """
     from app.models.transcription import Transcription
-    from app.services.youtube_transcriber import (
-        download_youtube_audio,
-        format_transcript_with_llm,
-        transcribe_audio,
-    )
+    from app.services.youtube_transcriber import (download_youtube_audio,
+                                                  format_transcript_with_llm,
+                                                  transcribe_audio)
 
     logger.info(f"Processing transcription task: {transcription_id}")
 

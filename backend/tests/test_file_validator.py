@@ -4,14 +4,12 @@ Tests for file validation service.
 
 import pytest
 
-from app.services.file_validator import (
-    FileValidationError,
-    validate_file_extension,
-    validate_file_size,
-    validate_magic_bytes,
-    validate_text_content_safety,
-    validate_uploaded_file,
-)
+from app.services.file_validator import (FileValidationError,
+                                         validate_file_extension,
+                                         validate_file_size,
+                                         validate_magic_bytes,
+                                         validate_text_content_safety,
+                                         validate_uploaded_file)
 
 
 class TestValidateFileExtension:

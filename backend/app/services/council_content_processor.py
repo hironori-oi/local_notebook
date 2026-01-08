@@ -26,7 +26,8 @@ from app.models.council_agenda_material import CouncilAgendaMaterial
 from app.models.llm_settings import LLMSettings
 from app.services.embedding import get_embedding_client
 from app.services.llm_client import call_generation_llm
-from app.services.url_content_fetcher import URLContentFetchError, fetch_url_with_retry
+from app.services.url_content_fetcher import (URLContentFetchError,
+                                              fetch_url_with_retry)
 
 logger = logging.getLogger(__name__)
 

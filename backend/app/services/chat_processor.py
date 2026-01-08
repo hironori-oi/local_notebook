@@ -23,10 +23,8 @@ from app.models.message import Message
 from app.models.source import Source
 from app.services.embedding import embed_texts
 from app.services.llm_client import call_llm
-from app.services.rag_utils import (
-    get_conversation_history_generic,
-    update_session_timestamp,
-)
+from app.services.rag_utils import (get_conversation_history_generic,
+                                    update_session_timestamp)
 
 logger = logging.getLogger(__name__)
 

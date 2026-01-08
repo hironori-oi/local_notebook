@@ -8,53 +8,33 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    UploadFile,
-    status,
-)
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
+                     HTTPException, Query, UploadFile, status)
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.celery_app.tasks.document import enqueue_document_check
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
-from app.models.document_check import (
-    DocumentCheck,
-    DocumentCheckIssue,
-    UserCheckPreference,
-)
+from app.models.document_check import (DocumentCheck, DocumentCheckIssue,
+                                       UserCheckPreference)
 from app.models.user import User
-from app.schemas.document_check import (
-    CheckTypeInfo,
-    CheckTypesResponse,
-    DocumentCheckDetail,
-    DocumentCheckIssueOut,
-    DocumentCheckListResponse,
-    DocumentCheckSummary,
-    DocumentCheckUploadResponse,
-    IssueUpdateRequest,
-    IssueUpdateResponse,
-    UserCheckPreferenceOut,
-    UserCheckPreferenceUpdate,
-)
-from app.services.document_checker import (
-    CHECK_TYPES,
-    get_check_types_info,
-    get_default_check_types,
-)
-from app.services.file_validator import (
-    FileValidationError,
-    validate_file_extension,
-    validate_file_size,
-    validate_magic_bytes,
-)
+from app.schemas.document_check import (CheckTypeInfo, CheckTypesResponse,
+                                        DocumentCheckDetail,
+                                        DocumentCheckIssueOut,
+                                        DocumentCheckListResponse,
+                                        DocumentCheckSummary,
+                                        DocumentCheckUploadResponse,
+                                        IssueUpdateRequest,
+                                        IssueUpdateResponse,
+                                        UserCheckPreferenceOut,
+                                        UserCheckPreferenceUpdate)
+from app.services.document_checker import (CHECK_TYPES, get_check_types_info,
+                                           get_default_check_types)
+from app.services.file_validator import (FileValidationError,
+                                         validate_file_extension,
+                                         validate_file_size,
+                                         validate_magic_bytes)
 from app.services.pptx_extractor import extract_text_from_pptx
 from app.services.text_extractor import extract_text_from_pdf_bytes
 

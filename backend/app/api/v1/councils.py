@@ -12,26 +12,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.core.deps import check_council_access, get_current_user, get_db, parse_uuid
+from app.core.deps import (check_council_access, get_current_user, get_db,
+                           parse_uuid)
 from app.models.council import Council
 from app.models.council_agenda_item import CouncilAgendaItem
 from app.models.council_meeting import CouncilMeeting
 from app.models.council_note import CouncilNote
 from app.models.user import User
-from app.schemas.council import (
-    CouncilCreate,
-    CouncilDetailOut,
-    CouncilListOut,
-    CouncilOut,
-    CouncilUpdate,
-)
-from app.schemas.council_meeting import (
-    CalendarMeetingItem,
-    CalendarResponse,
-    GlobalCalendarMeetingItem,
-    GlobalCalendarResponse,
-)
-from app.services.audit import AuditAction, TargetType, get_client_info, log_action
+from app.schemas.council import (CouncilCreate, CouncilDetailOut,
+                                 CouncilListOut, CouncilOut, CouncilUpdate)
+from app.schemas.council_meeting import (CalendarMeetingItem, CalendarResponse,
+                                         GlobalCalendarMeetingItem,
+                                         GlobalCalendarResponse)
+from app.services.audit import (AuditAction, TargetType, get_client_info,
+                                log_action)
 
 router = APIRouter(prefix="/councils", tags=["councils"])
 
