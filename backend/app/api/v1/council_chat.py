@@ -11,20 +11,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import (check_council_access, get_current_user, get_db,
-                           parse_uuid)
+from app.core.deps import check_council_access, get_current_user, get_db, parse_uuid
 from app.models.council_chat_session import CouncilChatSession
 from app.models.council_message import CouncilMessage
 from app.models.user import User
-from app.schemas.council_chat import (CouncilChatHistoryResponse,
-                                      CouncilChatRequest, CouncilChatResponse,
-                                      CouncilChatSessionCreate,
-                                      CouncilChatSessionListResponse,
-                                      CouncilChatSessionResponse,
-                                      CouncilChatSessionUpdate,
-                                      CouncilMessageOut)
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
+from app.schemas.council_chat import (
+    CouncilChatHistoryResponse,
+    CouncilChatRequest,
+    CouncilChatResponse,
+    CouncilChatSessionCreate,
+    CouncilChatSessionListResponse,
+    CouncilChatSessionResponse,
+    CouncilChatSessionUpdate,
+    CouncilMessageOut,
+)
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
 from app.services.council_rag import council_rag_answer
 
 router = APIRouter(prefix="/council-chat", tags=["council-chat"])

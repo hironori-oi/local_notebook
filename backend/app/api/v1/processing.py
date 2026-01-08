@@ -11,8 +11,10 @@ from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.celery_app.tasks.content import (enqueue_minute_processing,
-                                          enqueue_source_processing)
+from app.celery_app.tasks.content import (
+    enqueue_minute_processing,
+    enqueue_source_processing,
+)
 from app.core.deps import get_current_user, get_db
 from app.models.minute import Minute
 from app.models.notebook import Notebook

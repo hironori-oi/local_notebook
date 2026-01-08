@@ -9,11 +9,14 @@ from app.core.deps import check_notebook_access, get_current_user, get_db
 from app.models.notebook import Notebook
 from app.models.source import Source
 from app.models.user import User
-from app.schemas.notebook import (NotebookCreate, NotebookListOut,
-                                  NotebookListResponse, NotebookOut,
-                                  NotebookUpdate)
-from app.services.audit import (AuditAction, TargetType, get_client_info,
-                                log_action)
+from app.schemas.notebook import (
+    NotebookCreate,
+    NotebookListOut,
+    NotebookListResponse,
+    NotebookOut,
+    NotebookUpdate,
+)
+from app.services.audit import AuditAction, TargetType, get_client_info, log_action
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 

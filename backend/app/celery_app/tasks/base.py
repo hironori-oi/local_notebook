@@ -112,8 +112,7 @@ def recover_transcription_tasks(db: Session) -> int:
             db.commit()
 
             # Re-enqueue the task
-            from app.celery_app.tasks.transcription import \
-                process_transcription_task
+            from app.celery_app.tasks.transcription import process_transcription_task
 
             process_transcription_task.delay(str(task.id))
 
@@ -257,8 +256,7 @@ def recover_document_check_tasks(db: Session) -> int:
             task.error_message = None
             db.commit()
 
-            from app.celery_app.tasks.document import \
-                process_document_check_task
+            from app.celery_app.tasks.document import process_document_check_task
 
             process_document_check_task.delay(str(task.id))
 
@@ -303,8 +301,7 @@ def recover_slide_project_tasks(db: Session) -> int:
             task.error_message = None
             db.commit()
 
-            from app.celery_app.tasks.slide import \
-                process_slide_generation_task
+            from app.celery_app.tasks.slide import process_slide_generation_task
 
             process_slide_generation_task.delay(str(task.id))
 
