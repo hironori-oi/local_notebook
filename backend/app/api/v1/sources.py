@@ -1,4 +1,5 @@
 import logging
+import tempfile
 import uuid
 from pathlib import Path
 from typing import List
@@ -40,6 +41,7 @@ from app.services.audit import AuditAction, TargetType, get_client_info, log_act
 from app.services.embedding import embed_texts
 from app.services.file_validator import FileValidationError, validate_uploaded_file
 from app.services.text_chunker import chunk_pages_with_overlap
+from app.services.storage import get_storage_service
 from app.services.text_extractor import (
     extract_text_from_docx,
     extract_text_from_pdf,
@@ -171,21 +173,21 @@ async def upload_source(
             detail=e.message,
         )
 
-    # Create upload directory if it doesn't exist
-    upload_dir = Path(settings.UPLOAD_DIR)
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Get storage service
+    storage = get_storage_service("uploads")
 
     # Generate unique file path
     src_id = uuid.uuid4()
     suffix = Path(file.filename or "").suffix.lower()
-    dest_path = upload_dir / f"{src_id}{suffix}"
+    storage_path = f"{src_id}{suffix}"
 
-    # Write file to disk
+    # Write file to storage
     try:
-        with dest_path.open("wb") as f:
-            f.write(content)
-    except IOError as e:
-        logger.error(f"Failed to write file to disk: {e}")
+        file_location = storage.upload(
+            storage_path, content, file.content_type or "application/octet-stream"
+        )
+    except Exception as e:
+        logger.error(f"Failed to write file to storage: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="ファイルの保存に失敗しました",
@@ -197,8 +199,10 @@ async def upload_source(
         try:
             folder_uuid = UUID(folder_id)
         except ValueError:
-            if dest_path.exists():
-                dest_path.unlink()
+            try:
+                storage.delete(storage_path)
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="無効なフォルダIDです",
@@ -212,8 +216,10 @@ async def upload_source(
             .first()
         )
         if not folder:
-            if dest_path.exists():
-                dest_path.unlink()
+            try:
+                storage.delete(storage_path)
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="フォルダが見つからないか、このノートブックに属していません",
@@ -225,7 +231,7 @@ async def upload_source(
         notebook_id=nb_uuid,
         folder_id=folder_uuid,
         title=file.filename,
-        file_path=str(dest_path),
+        file_path=file_location,
         file_type=file_type,
         created_by=current_user.id,
     )
@@ -237,28 +243,47 @@ async def upload_source(
     except Exception as e:
         # Rollback: delete the file if database insert fails
         logger.error(f"Database insert failed, rolling back file: {e}")
-        if dest_path.exists():
-            dest_path.unlink()
+        try:
+            storage.delete(storage_path)
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="ソースの登録に失敗しました",
         )
 
     # Extract text based on file type
+    # Use temporary file for text extraction (works with both local and cloud storage)
+    temp_path = None
     try:
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=suffix
+        ) as temp_file:
+            temp_file.write(content)
+            temp_path = Path(temp_file.name)
+
         if file_type == "pdf":
-            page_texts = extract_text_from_pdf(dest_path)
+            page_texts = extract_text_from_pdf(temp_path)
         elif file_type == "docx":
-            page_texts = extract_text_from_docx(dest_path)
+            page_texts = extract_text_from_docx(temp_path)
         else:
-            page_texts = extract_text_from_txt(dest_path)
+            page_texts = extract_text_from_txt(temp_path)
+
+        # Clean up temp file
+        if temp_path.exists():
+            temp_path.unlink()
     except Exception as e:
         logger.error(f"Text extraction failed: {e}")
+        # Clean up temp file
+        if "temp_path" in locals() and temp_path.exists():
+            temp_path.unlink()
         # Rollback: delete source and file
         db.delete(source)
         db.commit()
-        if dest_path.exists():
-            dest_path.unlink()
+        try:
+            storage.delete(storage_path)
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"テキスト抽出に失敗しました: {str(e)}",
@@ -300,8 +325,10 @@ async def upload_source(
             # Rollback: delete source and file
             db.delete(source)
             db.commit()
-            if dest_path.exists():
-                dest_path.unlink()
+            try:
+                storage.delete(storage_path)
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"埋め込み生成に失敗しました: {str(e)}",
@@ -459,10 +486,19 @@ def delete_source(
     # Delete chunks first
     db.query(SourceChunk).filter(SourceChunk.source_id == src_uuid).delete()
 
-    # Delete the source file if it exists
-    file_path = Path(source.file_path)
-    if file_path.exists():
-        file_path.unlink()
+    # Delete the source file from storage
+    # Handle both old local paths and new storage paths for backward compatibility
+    try:
+        file_path_obj = Path(source.file_path)
+        if file_path_obj.is_absolute() and file_path_obj.exists():
+            # Legacy local file - delete directly
+            file_path_obj.unlink()
+        else:
+            # New storage system - use storage service
+            storage = get_storage_service("uploads")
+            storage.delete(source.file_path)
+    except Exception as e:
+        logger.warning(f"Failed to delete source file from storage: {e}")
 
     # Delete the source record
     db.delete(source)

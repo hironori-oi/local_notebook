@@ -118,3 +118,10 @@ logs/
 # Hugging Face Cache
 # ===========================================
 .cache/
+
+# ===========================================
+# Claude Code (auto-generated)
+# ===========================================
+CLAUDE.md
+**/CLAUDE.md
+toolhub.override.yml

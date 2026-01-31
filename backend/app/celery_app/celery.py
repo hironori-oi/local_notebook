@@ -39,9 +39,6 @@ def on_worker_ready(sender, **kwargs):
     """
     logger.info("Celery worker ready, checking for interrupted tasks...")
 
-    # Import here to avoid circular imports
-    from app.celery_app.tasks.base import recover_processing_tasks
-
     # Run recovery in a separate task
     celery_app.send_task(
         "app.celery_app.tasks.base.recover_all_processing_tasks",

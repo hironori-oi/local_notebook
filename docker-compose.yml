@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL with pgvector extension
   postgres:
@@ -13,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-notebooklm}"]
       interval: 10s
@@ -31,7 +29,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -87,8 +85,8 @@ services:
       RATE_LIMIT_API_REQUESTS: ${RATE_LIMIT_API_REQUESTS:-100}
       RATE_LIMIT_API_WINDOW: ${RATE_LIMIT_API_WINDOW:-60}
 
-      # CORS
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      # CORS (includes common alternative ports for flexibility)
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:3010,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3010,https://local-notebooklm.toolhub.local}
 
       # File uploads
       UPLOAD_DIR: /app/data/uploads
@@ -113,7 +111,7 @@ services:
       - generated_data:/app/data/generated
       - audio_temp:/app/data/audio_temp
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 30s
@@ -138,7 +136,7 @@ services:
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
       interval: 30s
@@ -212,7 +210,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       FLOWER_BASIC_AUTH: ${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
     ports:
-      - "5555:5555"
+      - "${FLOWER_PORT:-5555}:5555"
     command: ["python", "-m", "celery", "-A", "app.celery_app.celery:celery_app", "flower", "--port=5555"]
     networks:
       - notebooklm-network

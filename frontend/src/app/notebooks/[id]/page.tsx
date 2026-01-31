@@ -341,12 +341,18 @@ export default function NotebookDetailPage() {
 
         if (nbRes.ok) setNotebook(await nbRes.json());
         if (srcRes.ok) {
-          const loadedSources: Source[] = await srcRes.json();
+          const srcData = await srcRes.json();
+          // API returns {items: [...], total, offset} format
+          const loadedSources: Source[] = srcData.items || srcData;
           setSources(loadedSources);
           // Auto-select all sources by default
           setSelectedSourceIds(new Set(loadedSources.map((s) => s.id)));
         }
-        if (notesRes.ok) setNotes(await notesRes.json());
+        if (notesRes.ok) {
+          const notesData = await notesRes.json();
+          // API returns {items: [...], total, offset, limit} format
+          setNotes(notesData.items || notesData);
+        }
 
         // Load sessions
         await loadSessions();
@@ -1440,20 +1446,20 @@ export default function NotebookDetailPage() {
 
           {/* Generation Tools Navigation */}
           <div className="flex gap-2 p-3 border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/50">
-            <Link
+            <a
               href={`/notebooks/${notebookId}/infographic`}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-surface-600 dark:text-surface-300 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-accent-400 dark:hover:border-accent-600 hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-all"
             >
               <LayoutGrid className="w-4 h-4" />
               インフォグラフィック
-            </Link>
-            <Link
+            </a>
+            <a
               href={`/notebooks/${notebookId}/email`}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-surface-600 dark:text-surface-300 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
             >
               <Mail className="w-4 h-4" />
               メール生成
-            </Link>
+            </a>
           </div>
 
           {/* Panel Content */}

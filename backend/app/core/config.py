@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     # Environment Mode
     # ===========================================
     ENV: Literal["development", "production"] = "development"
+    DEPLOYMENT_MODE: Literal["local", "cloud"] = "local"
+
+    # ===========================================
+    # Supabase Storage Configuration
+    # ===========================================
+    STORAGE_PROVIDER: Literal["local", "supabase"] = "local"
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+    SUPABASE_STORAGE_BUCKET: str = "uploads"
 
     # ===========================================
     # Database

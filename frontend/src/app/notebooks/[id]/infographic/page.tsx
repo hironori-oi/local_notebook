@@ -142,7 +142,9 @@ export default function InfographicPage() {
 
         if (nbRes.ok) setNotebook(await nbRes.json());
         if (srcRes.ok) {
-          const loadedSources: Source[] = await srcRes.json();
+          const srcData = await srcRes.json();
+          // API returns {items: [...], total, offset} format
+          const loadedSources: Source[] = srcData.items || srcData;
           setSources(loadedSources);
           setSelectedSourceIds(new Set(loadedSources.map((s) => s.id)));
         }

@@ -330,7 +330,7 @@ def recover_chat_message_tasks(db: Session) -> int:
     Returns:
         Number of tasks marked as failed
     """
-    from app.models.chat import ChatMessage
+    from app.models.message import Message as ChatMessage
 
     stuck_tasks = (
         db.query(ChatMessage)

@@ -116,7 +116,9 @@ export default function EmailPage() {
 
         if (nbRes.ok) setNotebook(await nbRes.json());
         if (srcRes.ok) {
-          const loadedSources: Source[] = await srcRes.json();
+          const srcData = await srcRes.json();
+          // API returns {items: [...], total, offset} format
+          const loadedSources: Source[] = srcData.items || srcData;
           setSources(loadedSources);
           // Auto-select all sources as documents
           setSelectedSourceIds(new Set(loadedSources.map((s) => s.id)));
