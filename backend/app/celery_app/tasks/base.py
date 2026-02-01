@@ -33,7 +33,11 @@ class DatabaseTask(Task):
     def db(self) -> Session:
         """Get or create a database session."""
         if self._db_session is None:
-            engine = create_engine(settings.DATABASE_URL)
+            # Configure SSL for Supabase connections
+            connect_args = {}
+            if "supabase" in settings.DATABASE_URL.lower():
+                connect_args["sslmode"] = "require"
+            engine = create_engine(settings.DATABASE_URL, connect_args=connect_args)
             SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
             self._db_session = SessionLocal()
         return self._db_session
@@ -55,7 +59,11 @@ def recover_all_processing_tasks():
     """
     logger.info("Starting recovery of interrupted tasks...")
 
-    engine = create_engine(settings.DATABASE_URL)
+    # Configure SSL for Supabase connections
+    connect_args = {}
+    if "supabase" in settings.DATABASE_URL.lower():
+        connect_args["sslmode"] = "require"
+    engine = create_engine(settings.DATABASE_URL, connect_args=connect_args)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
 
