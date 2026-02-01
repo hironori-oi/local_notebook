@@ -376,16 +376,16 @@ async def _extract_pdf_text_pypdf2(pdf_content: bytes) -> str:
 
 async def fetch_url_with_retry(
     url: str,
-    max_retries: int = 2,
-    retry_delay: float = 1.0,
+    max_retries: int = 3,
+    initial_delay: float = 2.0,
 ) -> Tuple[str, str]:
     """
-    Fetch URL content with retry logic.
+    Fetch URL content with retry logic and exponential backoff.
 
     Args:
         url: URL to fetch
-        max_retries: Maximum number of retries
-        retry_delay: Delay between retries in seconds
+        max_retries: Maximum number of retries (default: 3 = 4 total attempts)
+        initial_delay: Initial delay between retries in seconds (doubles each retry)
 
     Returns:
         Tuple of (extracted_text, content_type)
@@ -394,6 +394,7 @@ async def fetch_url_with_retry(
         URLContentFetchError: If all retries fail
     """
     import asyncio
+    import random
 
     last_error = None
     for attempt in range(max_retries + 1):
@@ -402,10 +403,12 @@ async def fetch_url_with_retry(
         except URLContentFetchError as e:
             last_error = e
             if attempt < max_retries:
+                # Exponential backoff with jitter
+                delay = initial_delay * (2 ** attempt) + random.uniform(0, 1)
                 logger.warning(
-                    f"URL fetch attempt {attempt + 1} failed, retrying in {retry_delay}s: {e}"
+                    f"URL fetch attempt {attempt + 1} failed, retrying in {delay:.1f}s: {e}"
                 )
-                await asyncio.sleep(retry_delay)
+                await asyncio.sleep(delay)
             else:
                 logger.error(f"URL fetch failed after {max_retries + 1} attempts: {e}")
 
