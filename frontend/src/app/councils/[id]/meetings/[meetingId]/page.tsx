@@ -177,15 +177,34 @@ export default function MeetingDetailPage() {
     loadData();
   }, [loadData]);
 
+  // Helper to check if agenda has completed materials
+  const hasCompletedMaterials = (agenda: CouncilAgendaItem) => {
+    // Check aggregated status
+    if (agenda.materials_processing_status === "completed") return true;
+    // Check individual materials if available
+    if (agenda.materials?.some(m => m.processing_status === "completed")) return true;
+    return false;
+  };
+
+  // Helper to check if agenda is processing
+  const isAgendaProcessing = (agenda: CouncilAgendaItem) => {
+    if (agenda.materials_processing_status === "processing") return true;
+    if (agenda.minutes_processing_status === "processing") return true;
+    // Check individual materials if available
+    if (agenda.materials?.some(m => m.processing_status === "processing")) return true;
+    return false;
+  };
+
+  // Helper to check if agenda has searchable content
+  const isAgendaSearchable = (agenda: CouncilAgendaItem) => {
+    return hasCompletedMaterials(agenda) || agenda.minutes_processing_status === "completed";
+  };
+
   // Polling for processing status (check if any agenda is processing)
   useEffect(() => {
     if (!meeting) return;
 
-    const needsPolling = meeting.agendas.some(
-      (agenda) =>
-        agenda.materials_processing_status === "processing" ||
-        agenda.minutes_processing_status === "processing"
-    );
+    const needsPolling = meeting.agendas.some(isAgendaProcessing);
 
     if (!needsPolling) return;
 
@@ -461,7 +480,7 @@ export default function MeetingDetailPage() {
   const selectAllAgendasForInfographic = () => {
     if (!meeting) return;
     const processedAgendaIds = meeting.agendas
-      .filter((a) => a.materials_processing_status === "completed" || a.minutes_processing_status === "completed")
+      .filter(isAgendaSearchable)
       .map((a) => a.id);
     setSelectedAgendaIdsForInfographic(processedAgendaIds);
   };
@@ -791,11 +810,11 @@ export default function MeetingDetailPage() {
                           </div>
                         </div>
                         <div className="max-h-32 overflow-y-auto space-y-1 p-2 bg-surface-50 dark:bg-surface-800 rounded-lg">
-                          {meeting.agendas.filter(a => a.materials_processing_status === "completed" || a.minutes_processing_status === "completed").length === 0 ? (
+                          {meeting.agendas.filter(isAgendaSearchable).length === 0 ? (
                             <p className="text-xs text-surface-400 text-center py-2">処理済みの議題がありません</p>
                           ) : (
                             meeting.agendas
-                              .filter((a) => a.materials_processing_status === "completed" || a.minutes_processing_status === "completed")
+                              .filter(isAgendaSearchable)
                               .map((agenda) => (
                                 <label
                                   key={agenda.id}

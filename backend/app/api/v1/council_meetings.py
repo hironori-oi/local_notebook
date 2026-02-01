@@ -14,10 +14,11 @@ from sqlalchemy.orm import Session
 from app.core.deps import check_council_access, get_current_user, get_db, parse_uuid
 from app.models.council import Council
 from app.models.council_agenda_item import CouncilAgendaItem
+from app.models.council_agenda_material import CouncilAgendaMaterial
 from app.models.council_meeting import CouncilMeeting
 from app.models.council_note import CouncilNote
 from app.models.user import User
-from app.schemas.council_agenda import CouncilAgendaOut
+from app.schemas.council_agenda import CouncilAgendaMaterialOut, CouncilAgendaOut
 from app.schemas.council_meeting import (
     CouncilMeetingCreate,
     CouncilMeetingDetailOut,
@@ -28,6 +29,41 @@ from app.schemas.council_meeting import (
 from app.services.audit import AuditAction, TargetType, get_client_info, log_action
 
 router = APIRouter(prefix="/council-meetings", tags=["council-meetings"])
+
+
+def _get_aggregated_materials_status(agenda: CouncilAgendaItem) -> str:
+    """Get aggregated processing status from materials array."""
+    if not agenda.materials or len(agenda.materials) == 0:
+        # No materials in array, use legacy status
+        return agenda.materials_processing_status
+
+    statuses = [m.processing_status for m in agenda.materials]
+    if any(s == "failed" for s in statuses):
+        return "failed"
+    if any(s == "processing" for s in statuses):
+        return "processing"
+    if any(s == "pending" for s in statuses):
+        return "pending"
+    if all(s == "completed" for s in statuses):
+        return "completed"
+    return "completed"
+
+
+def _build_material_out(material: CouncilAgendaMaterial) -> CouncilAgendaMaterialOut:
+    """Build material output schema."""
+    return CouncilAgendaMaterialOut(
+        id=material.id,
+        agenda_id=material.agenda_id,
+        material_number=material.material_number,
+        title=material.title,
+        source_type=material.source_type,
+        url=material.url,
+        original_filename=material.original_filename,
+        processing_status=material.processing_status,
+        has_summary=bool(material.summary),
+        created_at=material.created_at,
+        updated_at=material.updated_at,
+    )
 
 
 @router.get("/council/{council_id}", response_model=List[CouncilMeetingListItem])
@@ -187,10 +223,17 @@ def get_council_meeting_detail(
             title=agenda.title,
             materials_url=agenda.materials_url,
             minutes_url=agenda.minutes_url,
-            materials_processing_status=agenda.materials_processing_status,
+            materials_processing_status=_get_aggregated_materials_status(agenda),
             minutes_processing_status=agenda.minutes_processing_status,
-            has_materials_summary=bool(agenda.materials_summary),
+            has_materials_summary=bool(agenda.materials_summary)
+            or any(m.summary for m in agenda.materials if agenda.materials),
             has_minutes_summary=bool(agenda.minutes_summary),
+            materials_count=len(agenda.materials) if agenda.materials else 0,
+            materials=(
+                [_build_material_out(m) for m in agenda.materials]
+                if agenda.materials
+                else []
+            ),
             created_at=agenda.created_at,
             updated_at=agenda.updated_at,
         )
