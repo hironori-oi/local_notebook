@@ -54,14 +54,17 @@ export function AgendaFormModal({
       setMaterialsUrl(agenda?.materials_url || "");
       setMinutesUrl(agenda?.minutes_url || "");
       // Initialize materials from agenda if editing
+      // Filter out file-based materials (they have null URLs and are managed via detail page)
       if (agenda?.materials && agenda.materials.length > 0) {
         setMaterials(
-          agenda.materials.map((m) => ({
-            id: m.id,
-            material_number: m.material_number,
-            title: m.title || "",
-            url: m.url,
-          }))
+          agenda.materials
+            .filter((m) => m.source_type === "url" && m.url)
+            .map((m) => ({
+              id: m.id,
+              material_number: m.material_number,
+              title: m.title || "",
+              url: m.url || "",
+            }))
         );
       } else {
         setMaterials([]);
