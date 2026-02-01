@@ -12,18 +12,20 @@ interface AgendaCardProps {
 }
 
 /**
- * Get aggregated materials status from the materials array
+ * Get aggregated materials status from the materials array or materials_count
  */
 function getMaterialsStatus(agenda: CouncilAgendaItem): { hasAny: boolean; status: string; label: string } {
   const hasMaterialsArray = agenda.materials && agenda.materials.length > 0;
+  const hasMaterialsCount = agenda.materials_count > 0;
   const hasLegacyUrl = !!agenda.materials_url;
 
-  if (!hasMaterialsArray && !hasLegacyUrl) {
-    return { hasAny: false, status: "none", label: "URL未設定" };
+  // No materials at all
+  if (!hasMaterialsArray && !hasMaterialsCount && !hasLegacyUrl) {
+    return { hasAny: false, status: "none", label: "未登録" };
   }
 
+  // Has materials array with details (from detail API)
   if (hasMaterialsArray) {
-    // Aggregate status from materials array
     const statuses = agenda.materials.map((m) => m.processing_status);
     if (statuses.some((s) => s === "failed")) {
       return { hasAny: true, status: "failed", label: PROCESSING_STATUS_LABELS["failed"] || "失敗" };
@@ -41,7 +43,16 @@ function getMaterialsStatus(agenda: CouncilAgendaItem): { hasAny: boolean; statu
     return { hasAny: true, status: "completed", label: `${agenda.materials.length}件` };
   }
 
-  // Legacy materials_url
+  // Has materials_count but no details (from list API) - show count with processing status
+  if (hasMaterialsCount) {
+    return {
+      hasAny: true,
+      status: agenda.materials_processing_status,
+      label: `${agenda.materials_count}件 (${PROCESSING_STATUS_LABELS[agenda.materials_processing_status] || agenda.materials_processing_status})`,
+    };
+  }
+
+  // Legacy materials_url only
   return {
     hasAny: true,
     status: agenda.materials_processing_status,

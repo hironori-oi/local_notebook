@@ -135,6 +135,24 @@ def _get_agenda_and_check_access(
     return agenda
 
 
+def _get_aggregated_materials_status(agenda: CouncilAgendaItem) -> str:
+    """Get aggregated processing status from materials array."""
+    if not agenda.materials or len(agenda.materials) == 0:
+        # No materials in array, use legacy status
+        return agenda.materials_processing_status
+
+    statuses = [m.processing_status for m in agenda.materials]
+    if any(s == "failed" for s in statuses):
+        return "failed"
+    if any(s == "processing" for s in statuses):
+        return "processing"
+    if any(s == "pending" for s in statuses):
+        return "pending"
+    if all(s == "completed" for s in statuses):
+        return "completed"
+    return "completed"
+
+
 @router.get("/meeting/{meeting_id}", response_model=List[CouncilAgendaListItem])
 def list_meeting_agendas(
     meeting_id: str,
@@ -162,9 +180,10 @@ def list_meeting_agendas(
             title=agenda.title,
             has_materials_url=bool(agenda.materials_url),
             has_minutes_url=bool(agenda.minutes_url),
-            materials_processing_status=agenda.materials_processing_status,
+            materials_processing_status=_get_aggregated_materials_status(agenda),
             minutes_processing_status=agenda.minutes_processing_status,
-            has_materials_summary=bool(agenda.materials_summary),
+            has_materials_summary=bool(agenda.materials_summary)
+            or any(m.summary for m in agenda.materials if agenda.materials),
             has_minutes_summary=bool(agenda.minutes_summary),
             materials_count=len(agenda.materials) if agenda.materials else 0,
             created_at=agenda.created_at,
