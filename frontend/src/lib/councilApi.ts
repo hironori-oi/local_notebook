@@ -718,16 +718,11 @@ export async function uploadAgendaMaterial(
     formData.append("title", title);
   }
 
-  const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
-  const res = await fetch(
-    `${API_BASE_URL}/api/v1/council-agendas/${agendaId}/materials/upload`,
-    {
-      method: "POST",
-      credentials: "include",
-      body: formData,
-    }
+  // Use apiClientMultipart for consistency with other upload functions
+  const { apiClientMultipart } = await import("./apiClient");
+  const res = await apiClientMultipart(
+    `/api/v1/council-agendas/${agendaId}/materials/upload`,
+    formData
   );
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
