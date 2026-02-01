@@ -30,6 +30,8 @@ from app.services.auth import (
 COOKIE_NAME = "access_token"
 COOKIE_MAX_AGE = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60  # seconds
 COOKIE_SECURE = settings.ENV == "production"  # Only send over HTTPS in production
+# Cross-origin deployments require SameSite=None (e.g., Vercel frontend + Railway backend)
+COOKIE_SAMESITE: str = "none" if settings.DEPLOYMENT_MODE == "cloud" else "lax"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -41,7 +43,7 @@ def set_auth_cookie(response: Response, token: str) -> None:
         value=token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=COOKIE_MAX_AGE,
         path="/",
     )
@@ -54,7 +56,7 @@ def clear_auth_cookie(response: Response) -> None:
         path="/",
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
     )
 
 
