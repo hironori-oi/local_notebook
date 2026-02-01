@@ -32,7 +32,6 @@ import {
   updateCouncil,
   getGlobalCalendar,
   GlobalCalendarMeeting,
-  COUNCIL_TYPES,
 } from "../../lib/councilApi";
 import { Header } from "../../components/layout/Header";
 import { Button } from "../../components/ui/Button";
@@ -51,7 +50,6 @@ export default function CouncilsPage() {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [organization, setOrganization] = useState("");
-  const [councilType, setCouncilType] = useState("");
   const [officialUrl, setOfficialUrl] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -64,7 +62,6 @@ export default function CouncilsPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editOrganization, setEditOrganization] = useState("");
-  const [editCouncilType, setEditCouncilType] = useState("");
   const [editOfficialUrl, setEditOfficialUrl] = useState("");
   const [savingCouncil, setSavingCouncil] = useState(false);
 
@@ -143,7 +140,6 @@ export default function CouncilsPage() {
         title,
         description: desc || undefined,
         organization: organization || undefined,
-        council_type: councilType || undefined,
         official_url: officialUrl || undefined,
       });
       setCouncils((prev) => [council, ...prev]);
@@ -165,7 +161,6 @@ export default function CouncilsPage() {
     setTitle("");
     setDesc("");
     setOrganization("");
-    setCouncilType("");
     setOfficialUrl("");
   };
 
@@ -189,7 +184,6 @@ export default function CouncilsPage() {
     setEditTitle(council.title);
     setEditDesc(council.description || "");
     setEditOrganization(council.organization || "");
-    setEditCouncilType(council.council_type || "");
     setEditOfficialUrl(council.official_url || "");
   };
 
@@ -202,7 +196,6 @@ export default function CouncilsPage() {
         title: editTitle,
         description: editDesc || undefined,
         organization: editOrganization || undefined,
-        council_type: editCouncilType || undefined,
         official_url: editOfficialUrl || undefined,
       });
       setCouncils((prev) =>
@@ -213,7 +206,6 @@ export default function CouncilsPage() {
                 title: updated.title,
                 description: updated.description,
                 organization: updated.organization,
-                council_type: updated.council_type,
                 official_url: updated.official_url,
               }
             : c
@@ -412,19 +404,12 @@ export default function CouncilsPage() {
                       {council.title}
                     </h3>
 
-                    {/* Organization & Type */}
-                    {(council.organization || council.council_type) && (
+                    {/* Organization */}
+                    {council.organization && (
                       <div className="flex flex-wrap gap-2 mb-2">
-                        {council.organization && (
-                          <span className="text-xs px-2 py-1 rounded-lg bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400">
-                            {council.organization}
-                          </span>
-                        )}
-                        {council.council_type && (
-                          <span className="text-xs px-2 py-1 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
-                            {council.council_type}
-                          </span>
-                        )}
+                        <span className="text-xs px-2 py-1 rounded-lg bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400">
+                          {council.organization}
+                        </span>
                       </div>
                     )}
 
@@ -518,31 +503,12 @@ export default function CouncilsPage() {
             required
           />
 
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="所管省庁"
-              placeholder="例：経済産業省"
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
-            />
-            <div>
-              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-                種別
-              </label>
-              <select
-                className="w-full px-4 py-2.5 text-sm bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                value={councilType}
-                onChange={(e) => setCouncilType(e.target.value)}
-              >
-                <option value="">選択してください</option>
-                {COUNCIL_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <Input
+            label="所管省庁"
+            placeholder="例：経済産業省"
+            value={organization}
+            onChange={(e) => setOrganization(e.target.value)}
+          />
 
           <Input
             label="公式ページURL"
@@ -630,31 +596,12 @@ export default function CouncilsPage() {
             required
           />
 
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="所管省庁"
-              placeholder="例：経済産業省"
-              value={editOrganization}
-              onChange={(e) => setEditOrganization(e.target.value)}
-            />
-            <div>
-              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-                種別
-              </label>
-              <select
-                className="w-full px-4 py-2.5 text-sm bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                value={editCouncilType}
-                onChange={(e) => setEditCouncilType(e.target.value)}
-              >
-                <option value="">選択してください</option>
-                {COUNCIL_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <Input
+            label="所管省庁"
+            placeholder="例：経済産業省"
+            value={editOrganization}
+            onChange={(e) => setEditOrganization(e.target.value)}
+          />
 
           <Input
             label="公式ページURL"
