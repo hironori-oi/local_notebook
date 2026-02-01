@@ -128,14 +128,18 @@ export interface CouncilAgendaItem {
   meeting_id: string;
   agenda_number: number;
   title: string | null;
-  materials_url: string | null;  // Legacy
-  minutes_url: string | null;
-  materials_processing_status: string;  // Legacy
+  // From list API (CouncilAgendaListItem)
+  has_materials_url?: boolean;  // 資料URLあり（レガシー用）- list API only
+  has_minutes_url?: boolean;    // 議事録URLあり - list API only
+  // From detail API (CouncilAgendaOut)
+  materials_url?: string | null;  // Legacy - detail API only
+  minutes_url?: string | null;    // detail API only
+  materials_processing_status: string;  // Aggregated from materials or legacy
   minutes_processing_status: string;
-  has_materials_summary: boolean;  // Legacy
+  has_materials_summary: boolean;  // Legacy or aggregated
   has_minutes_summary: boolean;
   materials_count: number;
-  materials: CouncilAgendaMaterial[];
+  materials?: CouncilAgendaMaterial[];  // Only in detail API
   created_at: string;
   updated_at: string;
 }

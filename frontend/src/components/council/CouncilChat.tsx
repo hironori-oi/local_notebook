@@ -199,8 +199,19 @@ export function CouncilChat({
   };
 
   // Check if agenda has any searchable content
+  // Consider agenda searchable if:
+  // - materials_processing_status is "completed" (aggregated from individual materials)
+  // - OR minutes_processing_status is "completed"
+  // - OR has any materials with processing completed (materials_count > 0 with completed status)
   const isAgendaSearchable = (agenda: CouncilAgendaItem) => {
-    return agenda.materials_processing_status === "completed" || agenda.minutes_processing_status === "completed";
+    // Check if materials are processed (aggregated status from backend)
+    const hasMaterialsCompleted = agenda.materials_processing_status === "completed";
+    // Check if minutes are processed
+    const hasMinutesCompleted = agenda.minutes_processing_status === "completed";
+    // Check individual materials if available
+    const hasCompletedMaterials = agenda.materials?.some(m => m.processing_status === "completed") ?? false;
+
+    return hasMaterialsCompleted || hasMinutesCompleted || hasCompletedMaterials;
   };
 
   const getSourceLabel = (ref: CouncilSourceRef) => {

@@ -17,7 +17,8 @@ interface AgendaCardProps {
 function getMaterialsStatus(agenda: CouncilAgendaItem): { hasAny: boolean; status: string; label: string } {
   const hasMaterialsArray = agenda.materials && agenda.materials.length > 0;
   const hasMaterialsCount = agenda.materials_count > 0;
-  const hasLegacyUrl = !!agenda.materials_url;
+  // Check both has_materials_url (from list API) and materials_url (from detail API)
+  const hasLegacyUrl = agenda.has_materials_url || !!agenda.materials_url;
 
   // No materials at all
   if (!hasMaterialsArray && !hasMaterialsCount && !hasLegacyUrl) {
