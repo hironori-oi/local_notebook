@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
+# Check if HTTP/2 support is available
+try:
+    import h2  # noqa: F401
+    HTTP2_AVAILABLE = True
+except ImportError:
+    HTTP2_AVAILABLE = False
+
 # Maximum content size to fetch (10MB)
 MAX_CONTENT_SIZE = 10 * 1024 * 1024
 
@@ -100,7 +107,7 @@ async def fetch_url_content(url: str) -> Tuple[str, str]:
     if not url.startswith(("http://", "https://")):
         raise URLContentFetchError(f"無効なURL形式です: {url}")
 
-    logger.info(f"Fetching content from URL: {url}")
+    logger.info(f"Fetching content from URL: {url} (HTTP/2: {HTTP2_AVAILABLE})")
 
     # Extract domain for Referer header (helps with government site access)
     from urllib.parse import urlparse
@@ -136,7 +143,7 @@ async def fetch_url_content(url: str) -> Tuple[str, str]:
             timeout=timeout,
             follow_redirects=True,
             headers=headers,
-            http2=True,  # Enable HTTP/2 support
+            http2=HTTP2_AVAILABLE,  # Enable HTTP/2 if h2 package is available
         ) as client:
             response = await client.get(url)
             response.raise_for_status()
