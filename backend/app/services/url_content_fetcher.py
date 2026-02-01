@@ -102,6 +102,11 @@ async def fetch_url_content(url: str) -> Tuple[str, str]:
 
     logger.info(f"Fetching content from URL: {url}")
 
+    # Extract domain for Referer header (helps with government site access)
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+
     try:
         # Configure separate timeouts for different operations
         timeout = httpx.Timeout(
@@ -110,14 +115,28 @@ async def fetch_url_content(url: str) -> Tuple[str, str]:
             write=30.0,
             pool=30.0,
         )
+
+        # Build browser-like headers (important for government sites)
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,image/webp,*/*;q=0.7",
+            "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": base_url + "/",  # Pretend we came from the same site
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
+        }
+
         async with httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=True,
-            headers={
-                "User-Agent": USER_AGENT,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
-                "Accept-Language": "ja,en;q=0.9",
-            },
+            headers=headers,
+            http2=True,  # Enable HTTP/2 support
         ) as client:
             response = await client.get(url)
             response.raise_for_status()
