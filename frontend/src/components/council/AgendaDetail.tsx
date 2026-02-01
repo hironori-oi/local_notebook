@@ -253,6 +253,18 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
                     {material.url.length > 50 ? material.url.substring(0, 50) + "..." : material.url}
                   </a>
 
+                  {/* Processing Error */}
+                  {material.processing_status === "failed" && material.processing_error && (
+                    <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-red-600 dark:text-red-400">
+                          {material.processing_error}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Material Summary */}
                   {material.summary && (
                     <div className="mt-2 p-3 bg-surface-50 dark:bg-surface-700 rounded-lg">
