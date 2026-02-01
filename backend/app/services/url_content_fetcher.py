@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # Maximum content size to fetch (10MB)
 MAX_CONTENT_SIZE = 10 * 1024 * 1024
 
-# Request timeout in seconds
-REQUEST_TIMEOUT = 30.0
+# Request timeout in seconds (increased for government PDFs)
+REQUEST_TIMEOUT = 120.0  # 2 minutes for slow government servers
 
 # User-Agent for requests (to avoid being blocked)
 USER_AGENT = (
@@ -103,10 +103,21 @@ async def fetch_url_content(url: str) -> Tuple[str, str]:
     logger.info(f"Fetching content from URL: {url}")
 
     try:
+        # Configure separate timeouts for different operations
+        timeout = httpx.Timeout(
+            connect=30.0,      # 30s to establish connection
+            read=REQUEST_TIMEOUT,  # 120s to read response (for large PDFs)
+            write=30.0,
+            pool=30.0,
+        )
         async with httpx.AsyncClient(
-            timeout=REQUEST_TIMEOUT,
+            timeout=timeout,
             follow_redirects=True,
-            headers={"User-Agent": USER_AGENT},
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
+                "Accept-Language": "ja,en;q=0.9",
+            },
         ) as client:
             response = await client.get(url)
             response.raise_for_status()
