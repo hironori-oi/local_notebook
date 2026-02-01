@@ -9,9 +9,11 @@ This module handles:
 """
 
 import asyncio
+import base64
 import logging
 import os
 import re
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -29,6 +31,52 @@ logger = logging.getLogger(__name__)
 
 # Thread pool for blocking yt-dlp operations
 _executor = ThreadPoolExecutor(max_workers=2)
+
+# Cache for decoded cookies file path
+_cookies_file_path: Optional[str] = None
+
+
+def _get_cookies_file() -> Optional[str]:
+    """
+    Get the path to YouTube cookies file.
+
+    Decodes cookies from YOUTUBE_COOKIES_BASE64 environment variable
+    and writes to a temporary file if not already done.
+
+    Returns:
+        Path to cookies file, or None if not configured
+    """
+    global _cookies_file_path
+
+    # Return cached path if already created
+    if _cookies_file_path and os.path.exists(_cookies_file_path):
+        return _cookies_file_path
+
+    # Check for base64-encoded cookies in environment
+    cookies_base64 = os.environ.get("YOUTUBE_COOKIES_BASE64")
+    if not cookies_base64:
+        logger.debug("YOUTUBE_COOKIES_BASE64 not set, proceeding without cookies")
+        return None
+
+    try:
+        # Decode base64 cookies
+        cookies_content = base64.b64decode(cookies_base64).decode("utf-8")
+
+        # Write to a temporary file that persists for the process lifetime
+        cookies_dir = Path(settings.TEMP_AUDIO_DIR)
+        cookies_dir.mkdir(parents=True, exist_ok=True)
+        cookies_path = cookies_dir / "youtube_cookies.txt"
+
+        with open(cookies_path, "w", encoding="utf-8") as f:
+            f.write(cookies_content)
+
+        _cookies_file_path = str(cookies_path)
+        logger.info(f"YouTube cookies file created: {_cookies_file_path}")
+        return _cookies_file_path
+
+    except Exception as e:
+        logger.error(f"Failed to decode YouTube cookies: {e}")
+        return None
 
 
 def extract_video_id(url: str) -> Optional[str]:
@@ -86,6 +134,12 @@ def _download_audio_sync(url: str, output_path: str) -> dict:
         "no_warnings": True,
         "extract_flat": False,
     }
+
+    # Add cookies file if available (helps bypass YouTube bot detection)
+    cookies_file = _get_cookies_file()
+    if cookies_file:
+        ydl_opts["cookiefile"] = cookies_file
+        logger.info("Using YouTube cookies for authentication")
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
