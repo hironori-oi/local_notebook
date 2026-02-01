@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
     bind=True,
     base=DatabaseTask,
     name="app.celery_app.tasks.transcription.process_transcription",
-    queue="transcription",
+    queue="content",  # Changed from "transcription" to use existing queue on Railway
     autoretry_for=RETRYABLE_EXCEPTIONS,
     **RETRY_CONFIG,
 )

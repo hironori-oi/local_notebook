@@ -38,8 +38,8 @@ class CeleryConfig:
 
     # Task routing - define queues for different task types
     task_routes = {
-        # Long-running transcription tasks (dedicated worker recommended)
-        "app.celery_app.tasks.transcription.*": {"queue": "transcription"},
+        # Transcription tasks - use content queue (Railway worker doesn't have dedicated transcription queue)
+        "app.celery_app.tasks.transcription.*": {"queue": "content"},
         # Content processing (embedding + LLM formatting/summary)
         "app.celery_app.tasks.content.*": {"queue": "content"},
         "app.celery_app.tasks.council.*": {"queue": "content"},
