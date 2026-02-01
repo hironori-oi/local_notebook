@@ -121,7 +121,8 @@ def _download_audio_sync(url: str, output_path: str) -> dict:
         Dict with video info (title, duration, etc.)
     """
     ydl_opts = {
-        "format": "bestaudio/best",
+        # More flexible format selection - try audio first, then any format with audio
+        "format": "bestaudio/bestaudio*/best",
         "outtmpl": output_path,
         "postprocessors": [
             {
@@ -133,6 +134,10 @@ def _download_audio_sync(url: str, output_path: str) -> dict:
         "quiet": True,
         "no_warnings": True,
         "extract_flat": False,
+        # Additional options for better compatibility
+        "ignoreerrors": False,
+        "no_color": True,
+        "geo_bypass": True,
     }
 
     # Add cookies file if available (helps bypass YouTube bot detection)
