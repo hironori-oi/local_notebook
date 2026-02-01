@@ -26,7 +26,7 @@ function getMaterialsStatus(agenda: CouncilAgendaItem): { hasAny: boolean; statu
   }
 
   // Has materials array with details (from detail API)
-  if (hasMaterialsArray) {
+  if (hasMaterialsArray && agenda.materials) {
     const statuses = agenda.materials.map((m) => m.processing_status);
     if (statuses.some((s) => s === "failed")) {
       return { hasAny: true, status: "failed", label: PROCESSING_STATUS_LABELS["failed"] || "失敗" };
