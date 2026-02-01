@@ -706,14 +706,19 @@ export async function createAgendaMaterial(
 
 /**
  * Upload a PDF file as material
+ *
+ * The PDF is used for text extraction only - it is not stored permanently.
+ * The URL is stored so users can access the original document.
  */
 export async function uploadAgendaMaterial(
   agendaId: string,
   file: File,
+  url: string,
   title?: string
 ): Promise<CouncilAgendaMaterial> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("url", url);
   if (title) {
     formData.append("title", title);
   }

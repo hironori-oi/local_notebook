@@ -68,10 +68,16 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
     setAddingMaterial(true);
     try {
       if (uploadMode === "file" && selectedFile) {
-        // Upload file
+        // Upload file with URL
+        if (!newMaterialUrl.trim()) {
+          alert("資料のURLを入力してください（ユーザーが原本を確認するために必要です）");
+          setAddingMaterial(false);
+          return;
+        }
         await uploadAgendaMaterial(
           agenda.id,
           selectedFile,
+          newMaterialUrl.trim(),
           newMaterialTitle.trim() || undefined
         );
       } else {
@@ -240,37 +246,58 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
 
             {/* File Mode */}
             {uploadMode === "file" && (
-              <div className="space-y-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      // Validate file type
-                      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-                        alert('PDFファイルのみアップロード可能です');
-                        e.target.value = '';
-                        return;
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">
+                    PDFファイル <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        // Validate file type
+                        if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+                          alert('PDFファイルのみアップロード可能です');
+                          e.target.value = '';
+                          return;
+                        }
+                        // Validate file size (max 10MB)
+                        const maxSize = 10 * 1024 * 1024;
+                        if (file.size > maxSize) {
+                          alert('ファイルサイズが大きすぎます（最大10MB）');
+                          e.target.value = '';
+                          return;
+                        }
                       }
-                      // Validate file size (max 10MB)
-                      const maxSize = 10 * 1024 * 1024;
-                      if (file.size > maxSize) {
-                        alert('ファイルサイズが大きすぎます（最大10MB）');
-                        e.target.value = '';
-                        return;
-                      }
-                    }
-                    setSelectedFile(file || null);
-                  }}
-                  className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 dark:file:bg-primary-900/30 dark:file:text-primary-300"
-                />
-                {selectedFile && (
-                  <p className="text-sm text-surface-500 dark:text-surface-400">
-                    選択: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                      setSelectedFile(file || null);
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 dark:file:bg-primary-900/30 dark:file:text-primary-300"
+                  />
+                  {selectedFile && (
+                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                      選択: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">
+                    資料URL <span className="text-red-500">*</span>
+                    <span className="font-normal text-surface-400 ml-1">（ユーザーが原本を確認するため）</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={newMaterialUrl}
+                    onChange={(e) => setNewMaterialUrl(e.target.value)}
+                    placeholder="https://www.example.go.jp/..."
+                    className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100"
+                  />
+                  <p className="text-xs text-surface-400 dark:text-surface-500 mt-1">
+                    ※ PDFはテキスト抽出のみに使用され、保存されません
                   </p>
-                )}
+                </div>
               </div>
             )}
 

@@ -714,20 +714,25 @@ async def process_single_material(
         db: Database session
         material: Material to process
     """
-    # Check if material has source (URL or file)
-    if material.source_type == "url" and not material.url:
-        logger.info(f"No URL for material {material.id}")
-        return
-    if material.source_type == "file" and not material.file_path:
-        logger.info(f"No file_path for material {material.id}")
+    # Check if material has source (URL or file) or already has text
+    has_text = bool(material.text and material.text.strip())
+    has_url = bool(material.url)
+    has_file = bool(material.file_path)
+
+    if not has_text and not has_url and not has_file:
+        logger.info(f"No source for material {material.id}")
         return
 
     try:
         material.processing_status = "processing"
         db.commit()
 
-        # Step 1: Fetch content (from URL or file)
-        if material.source_type == "file":
+        # Step 1: Get text (already extracted, from URL, or from file)
+        if has_text:
+            # Text already extracted (e.g., from PDF upload)
+            logger.info(f"Using pre-extracted text for material {material.id}: {len(material.text)} chars")
+            text = material.text
+        elif has_file:
             logger.info(f"Extracting text from uploaded file: {material.file_path}")
             text = await _extract_text_from_uploaded_file(material.file_path)
             logger.info(f"Extracted {len(text)} chars from file")

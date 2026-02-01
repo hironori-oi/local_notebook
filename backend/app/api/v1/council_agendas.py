@@ -768,6 +768,7 @@ async def upload_agenda_material(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    url: str = Form(..., description="資料の公開URL（ユーザーが原本を確認するため）"),
     title: str = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -775,16 +776,30 @@ async def upload_agenda_material(
     """
     Upload a PDF file as material for an agenda item.
 
+    The PDF is used only for text extraction - it is NOT stored permanently.
+    The URL is stored so users can access the original document.
+
     Supported file types: PDF
     Processing flow:
     1. File validation (extension, magic bytes, size)
-    2. Save to storage
-    3. Create DB record
-    4. Background processing for text extraction and summary generation
+    2. Extract text from PDF (synchronously)
+    3. Create DB record with URL and extracted text
+    4. Background processing for summary generation only
     """
+    import tempfile
+    import os
+    import pdfplumber
+
     ip_address, user_agent = get_client_info(request)
     agenda_uuid = parse_uuid(agenda_id, "agenda ID")
     agenda = _get_agenda_and_check_access(db, agenda_uuid, current_user)
+
+    # Validate URL format
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URLは http:// または https:// で始まる必要があります",
+        )
 
     # Read file content
     content = await file.read()
@@ -806,24 +821,37 @@ async def upload_agenda_material(
             detail=e.message,
         )
 
-    # Get storage service
-    storage = get_storage_service("uploads")
-
-    # Generate unique file path
-    material_id = uuid.uuid4()
-    suffix = Path(file.filename or "").suffix.lower()
-    storage_path = f"council_materials/{agenda_id}/{material_id}{suffix}"
-
-    # Save file to storage
+    # Extract text from PDF directly (no permanent storage)
+    extracted_text = ""
     try:
-        file_location = storage.upload(
-            storage_path, content, file.content_type or "application/pdf"
-        )
+        # Write to temporary file for pdfplumber
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            texts = []
+            with pdfplumber.open(tmp_path) as pdf:
+                for i, page in enumerate(pdf.pages):
+                    text = page.extract_text()
+                    if text:
+                        texts.append(f"--- ページ {i + 1} ---\n{text}")
+            extracted_text = "\n\n".join(texts)
+            logger.info(f"Extracted {len(extracted_text)} chars from uploaded PDF")
+        finally:
+            # Always delete the temp file
+            os.unlink(tmp_path)
     except Exception as e:
-        logger.error(f"Failed to write file to storage: {e}")
+        logger.error(f"Failed to extract text from PDF: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="ファイルの保存に失敗しました",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"PDFからテキストを抽出できませんでした: {str(e)}",
+        )
+
+    if not extracted_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PDFからテキストを抽出できませんでした（画像のみのPDFの可能性があります）",
         )
 
     # Calculate next material number
@@ -835,17 +863,17 @@ async def upload_agenda_material(
     )
     next_number = (max_number[0] + 1) if max_number else 1
 
-    # Create material record
+    # Create material record with URL and extracted text
     material = CouncilAgendaMaterial(
-        id=material_id,
         agenda_id=agenda_uuid,
         material_number=next_number,
         title=title or file.filename,
-        source_type="file",
-        url=None,
-        file_path=storage_path,
+        source_type="url",  # Store as URL type since we have the URL
+        url=url,
+        file_path=None,  # No file stored
         original_filename=file.filename,
-        processing_status="pending",
+        text=extracted_text,  # Store extracted text directly
+        processing_status="pending",  # Will generate summary in background
     )
 
     try:
@@ -853,18 +881,13 @@ async def upload_agenda_material(
         db.commit()
         db.refresh(material)
     except Exception as e:
-        # Rollback: delete the file if database insert fails
-        logger.error(f"Database insert failed, rolling back file: {e}")
-        try:
-            storage.delete(storage_path)
-        except Exception:
-            pass
+        logger.error(f"Database insert failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="資料の登録に失敗しました",
         )
 
-    # Trigger background processing
+    # Trigger background processing for summary generation only
     enqueue_agenda_content_processing(agenda.id)
 
     log_action(
@@ -879,6 +902,8 @@ async def upload_agenda_material(
             "title": material.title,
             "type": "agenda_material_upload",
             "filename": file.filename,
+            "url": url,
+            "text_length": len(extracted_text),
         },
         ip_address=ip_address,
         user_agent=user_agent,
