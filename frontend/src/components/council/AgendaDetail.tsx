@@ -244,8 +244,26 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf"
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // Validate file type
+                      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+                        alert('PDFファイルのみアップロード可能です');
+                        e.target.value = '';
+                        return;
+                      }
+                      // Validate file size (max 10MB)
+                      const maxSize = 10 * 1024 * 1024;
+                      if (file.size > maxSize) {
+                        alert('ファイルサイズが大きすぎます（最大10MB）');
+                        e.target.value = '';
+                        return;
+                      }
+                    }
+                    setSelectedFile(file || null);
+                  }}
                   className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 dark:file:bg-primary-900/30 dark:file:text-primary-300"
                 />
                 {selectedFile && (

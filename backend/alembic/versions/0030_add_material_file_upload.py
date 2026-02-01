@@ -50,15 +50,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Make url non-nullable again
-    op.alter_column(
-        "council_agenda_materials",
-        "url",
-        existing_type=sa.String(2048),
-        nullable=False,
+    # Delete file-based materials (they have no URL, so can't make url non-nullable)
+    op.execute(
+        "DELETE FROM council_agenda_materials WHERE source_type = 'file'"
     )
 
     # Remove added columns
     op.drop_column("council_agenda_materials", "original_filename")
     op.drop_column("council_agenda_materials", "file_path")
     op.drop_column("council_agenda_materials", "source_type")
+
+    # Make url non-nullable again (safe after deleting file-based records)
+    op.alter_column(
+        "council_agenda_materials",
+        "url",
+        existing_type=sa.String(2048),
+        nullable=False,
+    )

@@ -248,6 +248,12 @@ async def _extract_text_from_uploaded_file(file_path: str) -> str:
 
     import pdfplumber
 
+    # Validate file path format (should be council_materials/{uuid}/{uuid}.pdf)
+    # This prevents path traversal attacks
+    import re
+    if not re.match(r'^council_materials/[a-f0-9-]+/[a-f0-9-]+\.pdf$', file_path):
+        raise ValueError(f"Invalid file path format: {file_path}")
+
     # Download file from storage
     storage = get_storage_service("uploads")
     content = storage.download(file_path)
