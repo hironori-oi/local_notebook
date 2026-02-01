@@ -96,7 +96,9 @@ export interface CouncilAgendaMaterial {
   agenda_id: string;
   material_number: number;
   title: string | null;
-  url: string;
+  source_type: "url" | "file";
+  url: string | null;
+  original_filename: string | null;
   processing_status: string;
   has_summary: boolean;
   created_at: string;
@@ -698,6 +700,38 @@ export async function createAgendaMaterial(
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
     throw new Error(error.detail || "資料の追加に失敗しました");
+  }
+  return res.json();
+}
+
+/**
+ * Upload a PDF file as material
+ */
+export async function uploadAgendaMaterial(
+  agendaId: string,
+  file: File,
+  title?: string
+): Promise<CouncilAgendaMaterial> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title) {
+    formData.append("title", title);
+  }
+
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/council-agendas/${agendaId}/materials/upload`,
+    {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || "ファイルのアップロードに失敗しました");
   }
   return res.json();
 }

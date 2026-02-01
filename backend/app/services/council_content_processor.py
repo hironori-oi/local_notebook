@@ -26,6 +26,7 @@ from app.models.council_agenda_material import CouncilAgendaMaterial
 from app.models.llm_settings import LLMSettings
 from app.services.embedding import get_embedding_client
 from app.services.llm_client import call_generation_llm
+from app.services.storage import get_storage_service
 from app.services.url_content_fetcher import URLContentFetchError, fetch_url_with_retry
 
 logger = logging.getLogger(__name__)
@@ -222,6 +223,61 @@ def get_custom_prompts(
         user_template = prompt_settings.get("council_materials_user")
 
     return system_prompt, user_template
+
+
+# =============================================================================
+# File Extraction Functions
+# =============================================================================
+
+
+async def _extract_text_from_uploaded_file(file_path: str) -> str:
+    """
+    Extract text from an uploaded PDF file.
+
+    Args:
+        file_path: Storage path of the uploaded file
+
+    Returns:
+        Extracted text content
+
+    Raises:
+        Exception: If text extraction fails
+    """
+    import os
+    import tempfile
+
+    import pdfplumber
+
+    # Download file from storage
+    storage = get_storage_service("uploads")
+    content = storage.download(file_path)
+
+    # Write to temporary file for processing
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        texts = []
+        with pdfplumber.open(tmp_path) as pdf:
+            for i, page in enumerate(pdf.pages):
+                try:
+                    text = page.extract_text()
+                    if text:
+                        texts.append(f"--- ページ {i + 1} ---\n{text}")
+                except Exception as e:
+                    logger.warning(f"Failed to extract page {i + 1}: {e}")
+                    continue
+
+        if not texts:
+            raise Exception("PDFからテキストを抽出できませんでした")
+
+        return "\n\n".join(texts)
+
+    finally:
+        # Clean up temporary file
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 # =============================================================================
@@ -643,7 +699,7 @@ async def process_single_material(
     Process a single material for a council agenda item.
 
     Steps:
-    1. Fetch content from material URL
+    1. Fetch content from material URL or extract from uploaded file
     2. Format text (regex-based)
     3. Generate summary (LLM)
     4. Create chunks with embeddings
@@ -652,18 +708,27 @@ async def process_single_material(
         db: Database session
         material: Material to process
     """
-    if not material.url:
+    # Check if material has source (URL or file)
+    if material.source_type == "url" and not material.url:
         logger.info(f"No URL for material {material.id}")
+        return
+    if material.source_type == "file" and not material.file_path:
+        logger.info(f"No file_path for material {material.id}")
         return
 
     try:
         material.processing_status = "processing"
         db.commit()
 
-        # Step 1: Fetch content
-        logger.info(f"Fetching material from: {material.url}")
-        text, content_type = await fetch_url_with_retry(material.url)
-        logger.info(f"Fetched {len(text)} chars ({content_type})")
+        # Step 1: Fetch content (from URL or file)
+        if material.source_type == "file":
+            logger.info(f"Extracting text from uploaded file: {material.file_path}")
+            text = await _extract_text_from_uploaded_file(material.file_path)
+            logger.info(f"Extracted {len(text)} chars from file")
+        else:
+            logger.info(f"Fetching material from: {material.url}")
+            text, content_type = await fetch_url_with_retry(material.url)
+            logger.info(f"Fetched {len(text)} chars ({content_type})")
 
         # Step 2: Format text
         formatted_text = _format_text_regex(text)

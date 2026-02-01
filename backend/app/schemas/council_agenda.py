@@ -16,13 +16,12 @@ class CouncilAgendaMaterialBase(BaseModel):
 
     material_number: int = Field(..., ge=1, description="資料番号")
     title: Optional[str] = Field(None, max_length=255, description="資料タイトル")
-    url: str = Field(..., max_length=2048, description="資料URL")
 
 
 class CouncilAgendaMaterialCreate(CouncilAgendaMaterialBase):
-    """Request schema for creating a council agenda material."""
+    """Request schema for creating a council agenda material via URL."""
 
-    pass
+    url: str = Field(..., max_length=2048, description="資料URL")
 
 
 class CouncilAgendaMaterialUpdate(BaseModel):
@@ -38,6 +37,9 @@ class CouncilAgendaMaterialOut(CouncilAgendaMaterialBase):
 
     id: UUID
     agenda_id: UUID
+    source_type: str = Field(default="url", description="'url' or 'file'")
+    url: Optional[str] = Field(None, max_length=2048, description="資料URL")
+    original_filename: Optional[str] = Field(None, description="アップロードファイル名")
     processing_status: str = Field(default="pending", description="処理状態")
     has_summary: bool = Field(default=False, description="要約生成済み")
     created_at: datetime

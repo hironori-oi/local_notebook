@@ -29,7 +29,16 @@ class CouncilAgendaMaterial(Base):
     )
     material_number = Column(Integer, nullable=False)  # 資料番号（agenda内でユニーク）
     title = Column(String(255), nullable=True)  # 資料タイトル（任意）
-    url = Column(String(2048), nullable=False)  # 資料URL
+
+    # Source type: "url" for URL-based materials, "file" for uploaded files
+    source_type = Column(String(10), nullable=False, default="url")
+
+    # URL (nullable when source_type is "file")
+    url = Column(String(2048), nullable=True)  # 資料URL
+
+    # File upload fields (used when source_type is "file")
+    file_path = Column(String(500), nullable=True)  # Storage path for uploaded file
+    original_filename = Column(String(255), nullable=True)  # Original filename
 
     # Fetched text content
     text = Column(Text, nullable=True)  # 取得した資料テキスト

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRef } from "react";
 import {
   FileText,
   ClipboardList,
@@ -13,6 +14,8 @@ import {
   Loader2,
   Plus,
   Trash2,
+  Upload,
+  Link,
 } from "lucide-react";
 import {
   CouncilAgendaItemDetail,
@@ -22,6 +25,7 @@ import {
   PROCESSING_STATUS_COLORS,
   regenerateAgendaSummary,
   createAgendaMaterial,
+  uploadAgendaMaterial,
   deleteAgendaMaterial,
 } from "../../lib/councilApi";
 
@@ -37,10 +41,13 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
   const [regeneratingMaterials, setRegeneratingMaterials] = useState(false);
   const [regeneratingMinutes, setRegeneratingMinutes] = useState(false);
   const [showAddMaterial, setShowAddMaterial] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"url" | "file">("url");
   const [newMaterialUrl, setNewMaterialUrl] = useState("");
   const [newMaterialTitle, setNewMaterialTitle] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [addingMaterial, setAddingMaterial] = useState(false);
   const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleMaterialExpanded = (materialId: string) => {
     setExpandedMaterialIds((prev) => {
@@ -55,19 +62,36 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
   };
 
   const handleAddMaterial = async () => {
-    if (!newMaterialUrl.trim()) return;
+    if (uploadMode === "url" && !newMaterialUrl.trim()) return;
+    if (uploadMode === "file" && !selectedFile) return;
+
     setAddingMaterial(true);
     try {
-      const nextNumber = agenda.materials.length > 0
-        ? Math.max(...agenda.materials.map((m) => m.material_number)) + 1
-        : 1;
-      await createAgendaMaterial(agenda.id, {
-        material_number: nextNumber,
-        title: newMaterialTitle.trim() || undefined,
-        url: newMaterialUrl.trim(),
-      });
+      if (uploadMode === "file" && selectedFile) {
+        // Upload file
+        await uploadAgendaMaterial(
+          agenda.id,
+          selectedFile,
+          newMaterialTitle.trim() || undefined
+        );
+      } else {
+        // URL mode
+        const nextNumber = agenda.materials.length > 0
+          ? Math.max(...agenda.materials.map((m) => m.material_number)) + 1
+          : 1;
+        await createAgendaMaterial(agenda.id, {
+          material_number: nextNumber,
+          title: newMaterialTitle.trim() || undefined,
+          url: newMaterialUrl.trim(),
+        });
+      }
+      // Reset form
       setNewMaterialUrl("");
       setNewMaterialTitle("");
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       setShowAddMaterial(false);
       onRefresh?.();
     } catch (error) {
@@ -166,6 +190,35 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
         {/* Add Material Form */}
         {showAddMaterial && (
           <div className="p-4 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 space-y-3">
+            {/* Mode Toggle */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setUploadMode("url")}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  uploadMode === "url"
+                    ? "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                    : "text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700"
+                }`}
+              >
+                <Link className="w-4 h-4" />
+                URL入力
+              </button>
+              <button
+                type="button"
+                onClick={() => setUploadMode("file")}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  uploadMode === "file"
+                    ? "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                    : "text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700"
+                }`}
+              >
+                <Upload className="w-4 h-4" />
+                ファイルアップロード
+              </button>
+            </div>
+
+            {/* Title Input (common) */}
             <input
               type="text"
               value={newMaterialTitle}
@@ -173,19 +226,46 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
               placeholder="資料タイトル（任意）"
               className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100"
             />
-            <input
-              type="url"
-              value={newMaterialUrl}
-              onChange={(e) => setNewMaterialUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100"
-            />
+
+            {/* URL Mode */}
+            {uploadMode === "url" && (
+              <input
+                type="url"
+                value={newMaterialUrl}
+                onChange={(e) => setNewMaterialUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100"
+              />
+            )}
+
+            {/* File Mode */}
+            {uploadMode === "file" && (
+              <div className="space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  className="w-full px-3 py-2 text-sm border border-surface-300 dark:border-surface-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-surface-700 dark:text-surface-100 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 dark:file:bg-primary-900/30 dark:file:text-primary-300"
+                />
+                {selectedFile && (
+                  <p className="text-sm text-surface-500 dark:text-surface-400">
+                    選択: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => {
                   setShowAddMaterial(false);
                   setNewMaterialUrl("");
                   setNewMaterialTitle("");
+                  setSelectedFile(null);
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                  }
                 }}
                 className="px-3 py-1.5 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
               >
@@ -193,7 +273,11 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
               </button>
               <button
                 onClick={handleAddMaterial}
-                disabled={!newMaterialUrl.trim() || addingMaterial}
+                disabled={
+                  (uploadMode === "url" && !newMaterialUrl.trim()) ||
+                  (uploadMode === "file" && !selectedFile) ||
+                  addingMaterial
+                }
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-50"
               >
                 {addingMaterial && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -243,15 +327,23 @@ export function AgendaDetail({ agenda, onRefresh }: AgendaDetailProps) {
                       {material.title}
                     </h5>
                   )}
-                  <a
-                    href={material.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    {material.url.length > 50 ? material.url.substring(0, 50) + "..." : material.url}
-                  </a>
+                  {/* Source: URL or File */}
+                  {material.source_type === "file" ? (
+                    <div className="inline-flex items-center gap-1.5 text-sm text-surface-600 dark:text-surface-400">
+                      <FileText className="w-4 h-4 text-primary-500" />
+                      <span>{material.original_filename || "アップロードファイル"}</span>
+                    </div>
+                  ) : material.url ? (
+                    <a
+                      href={material.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      {material.url.length > 50 ? material.url.substring(0, 50) + "..." : material.url}
+                    </a>
+                  ) : null}
 
                   {/* Processing Error */}
                   {material.processing_status === "failed" && material.processing_error && (

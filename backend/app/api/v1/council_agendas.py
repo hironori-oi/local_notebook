@@ -7,16 +7,29 @@ Provides CRUD operations for council agenda items (議題) with URL processing.
 from typing import List, Literal
 from uuid import UUID
 
+import logging
+import uuid
+from pathlib import Path
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    File,
+    Form,
     HTTPException,
     Query,
     Request,
+    UploadFile,
     status,
 )
 from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.services.file_validator import FileValidationError, validate_uploaded_file
+from app.services.storage import get_storage_service
+
+logger = logging.getLogger(__name__)
 
 from app.celery_app.tasks.council import (
     enqueue_agenda_content_processing,
@@ -52,7 +65,9 @@ def _build_material_out(material: CouncilAgendaMaterial) -> CouncilAgendaMateria
         agenda_id=material.agenda_id,
         material_number=material.material_number,
         title=material.title,
+        source_type=material.source_type,
         url=material.url,
+        original_filename=material.original_filename,
         processing_status=material.processing_status,
         has_summary=bool(material.summary),
         created_at=material.created_at,
@@ -69,7 +84,9 @@ def _build_material_detail_out(
         agenda_id=material.agenda_id,
         material_number=material.material_number,
         title=material.title,
+        source_type=material.source_type,
         url=material.url,
+        original_filename=material.original_filename,
         processing_status=material.processing_status,
         has_summary=bool(material.summary),
         text=material.text,
@@ -722,6 +739,135 @@ async def create_agenda_material(
     return _build_material_out(material)
 
 
+@router.post(
+    "/{agenda_id}/materials/upload",
+    response_model=CouncilAgendaMaterialOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_agenda_material(
+    agenda_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    title: str = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upload a PDF file as material for an agenda item.
+
+    Supported file types: PDF
+    Processing flow:
+    1. File validation (extension, magic bytes, size)
+    2. Save to storage
+    3. Create DB record
+    4. Background processing for text extraction and summary generation
+    """
+    ip_address, user_agent = get_client_info(request)
+    agenda_uuid = parse_uuid(agenda_id, "agenda ID")
+    agenda = _get_agenda_and_check_access(db, agenda_uuid, current_user)
+
+    # Read file content
+    content = await file.read()
+
+    # Validate file (only PDF allowed for council materials)
+    try:
+        file_type = validate_uploaded_file(
+            filename=file.filename or "",
+            content=content,
+            allowed_extensions={"pdf"},
+            max_size_mb=settings.MAX_UPLOAD_SIZE_MB,
+        )
+    except FileValidationError as e:
+        logger.warning(
+            f"File validation failed for user {current_user.id}: {e.message}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=e.message,
+        )
+
+    # Get storage service
+    storage = get_storage_service("uploads")
+
+    # Generate unique file path
+    material_id = uuid.uuid4()
+    suffix = Path(file.filename or "").suffix.lower()
+    storage_path = f"council_materials/{agenda_id}/{material_id}{suffix}"
+
+    # Save file to storage
+    try:
+        file_location = storage.upload(
+            storage_path, content, file.content_type or "application/pdf"
+        )
+    except Exception as e:
+        logger.error(f"Failed to write file to storage: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="ファイルの保存に失敗しました",
+        )
+
+    # Calculate next material number
+    max_number = (
+        db.query(CouncilAgendaMaterial.material_number)
+        .filter(CouncilAgendaMaterial.agenda_id == agenda_uuid)
+        .order_by(CouncilAgendaMaterial.material_number.desc())
+        .first()
+    )
+    next_number = (max_number[0] + 1) if max_number else 1
+
+    # Create material record
+    material = CouncilAgendaMaterial(
+        id=material_id,
+        agenda_id=agenda_uuid,
+        material_number=next_number,
+        title=title or file.filename,
+        source_type="file",
+        url=None,
+        file_path=storage_path,
+        original_filename=file.filename,
+        processing_status="pending",
+    )
+
+    try:
+        db.add(material)
+        db.commit()
+        db.refresh(material)
+    except Exception as e:
+        # Rollback: delete the file if database insert fails
+        logger.error(f"Database insert failed, rolling back file: {e}")
+        try:
+            storage.delete(storage_path)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="資料の登録に失敗しました",
+        )
+
+    # Trigger background processing
+    enqueue_agenda_content_processing(agenda.id)
+
+    log_action(
+        db=db,
+        action=AuditAction.CREATE_COUNCIL_MEETING,
+        user_id=current_user.id,
+        target_type=TargetType.COUNCIL_MEETING,
+        target_id=str(material.id),
+        details={
+            "agenda_id": agenda_id,
+            "material_number": material.material_number,
+            "title": material.title,
+            "type": "agenda_material_upload",
+            "filename": file.filename,
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+    return _build_material_out(material)
+
+
 @router.get(
     "/{agenda_id}/materials/{material_id}",
     response_model=CouncilAgendaMaterialDetailOut,
@@ -888,9 +1034,18 @@ def delete_agenda_material(
         )
 
     material_number = material.material_number
+    file_path = material.file_path
 
     db.delete(material)
     db.commit()
+
+    # Delete file from storage if this was an uploaded file
+    if file_path:
+        try:
+            storage = get_storage_service("uploads")
+            storage.delete(file_path)
+        except Exception as e:
+            logger.warning(f"Failed to delete file from storage: {e}")
 
     log_action(
         db=db,
